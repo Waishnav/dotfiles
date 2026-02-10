@@ -1,0 +1,1 @@
+/home/waishnav/.config/omarchy/current/theme/neovim.lua
