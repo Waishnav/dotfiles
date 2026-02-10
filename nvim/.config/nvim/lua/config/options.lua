@@ -6,8 +6,8 @@
 vim.opt.number = true
 vim.opt.relativenumber = true
 
--- Cursor
-vim.opt.guicursor = ""
+-- Block cursor in all modes
+vim.opt.guicursor = "n-v-c-sm:block,i-ci-ve:block,r-cr-o:block"
 
 -- Tabs and indentation (default 4, but 2 for web files via autocmd)
 vim.opt.tabstop = 4
