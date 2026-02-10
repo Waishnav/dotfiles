@@ -1,4 +1,4 @@
--- Formatter configuration (from old config)
+-- Formatter configuration
 return {
   "stevearc/conform.nvim",
   opts = {
@@ -25,10 +25,6 @@ return {
           return { "--tab-width", tostring(vim.bo.shiftwidth) }
         end,
       },
-    },
-    format_on_save = {
-      timeout_ms = 500,
-      lsp_fallback = true,
     },
   },
 }
