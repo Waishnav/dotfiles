@@ -1,0 +1,46 @@
+#!/bin/bash
+# Handle monitor connect/disconnect events
+# Moves windows from external workspaces (11-18) to laptop workspaces (1-8) when HDMI-A-1 disconnects
+
+EXTERNAL_MONITOR="HDMI-A-1"
+
+# Check if external monitor is connected
+is_external_connected() {
+    hyprctl monitors -j | jq -e ".[] | select(.name == \"$EXTERNAL_MONITOR\")" > /dev/null 2>&1
+}
+
+# Move windows from external workspaces to laptop workspaces
+migrate_windows_to_laptop() {
+    # Get all windows on external workspaces (11-18)
+    for ws in 11 12 13 14 15 16 17 18; do
+        laptop_ws=$((ws - 10))
+        
+        # Get window addresses on this workspace
+        windows=$(hyprctl clients -j | jq -r ".[] | select(.workspace.id == $ws) | .address")
+        
+        for addr in $windows; do
+            if [[ -n "$addr" ]]; then
+                hyprctl dispatch movetoworkspacesilent "$laptop_ws,address:$addr"
+            fi
+        done
+    done
+}
+
+# Main handler - call this when monitor state changes
+case "$1" in
+    "disconnect")
+        if ! is_external_connected; then
+            migrate_windows_to_laptop
+        fi
+        ;;
+    "check")
+        # Just check and migrate if needed
+        if ! is_external_connected; then
+            migrate_windows_to_laptop
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {disconnect|check}"
+        exit 1
+        ;;
+esac

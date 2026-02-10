@@ -1,0 +1,96 @@
+#!/bin/bash
+# Listen to Hyprland events and handle monitor changes
+# Syncs workspaces when external monitor is connected/disconnected
+
+EXTERNAL_MONITOR="HDMI-A-1"
+LAPTOP_MONITOR="eDP-1"
+LOG_FILE="/tmp/hypr-event-listener.log"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Migrate all windows from external workspaces (11-18) to laptop workspaces (1-8)
+# Then remove those workspaces so they don't show in waybar
+migrate_windows_to_laptop() {
+    log "Migrating windows from external to laptop..."
+    for ws in 11 12 13 14 15 16 17 18; do
+        laptop_ws=$((ws - 10))
+        windows=$(hyprctl clients -j | jq -r ".[] | select(.workspace.id == $ws) | .address")
+        for addr in $windows; do
+            if [[ -n "$addr" ]]; then
+                log "  Moving window $addr from WS $ws to WS $laptop_ws"
+                hyprctl dispatch movetoworkspacesilent "$laptop_ws,address:$addr"
+            fi
+        done
+    done
+    log "Migration complete"
+    
+    # Remove persistent flag from external workspaces so Hyprland auto-removes them
+    log "Removing external workspaces persistence..."
+    for ws in 11 12 13 14 15 16 17 18; do
+        hyprctl keyword workspace "$ws,persistent:false" 2>/dev/null
+    done
+    log "External workspaces marked non-persistent"
+}
+
+# When external monitor connects, restore persistent workspaces and sync
+sync_to_current_workspace() {
+    log "External monitor connected, restoring workspaces..."
+    
+    # Restore persistent workspaces on external monitor
+    for ws in 11 12 13 14 15 16 17 18; do
+        hyprctl keyword workspace "$ws,monitor:$EXTERNAL_MONITOR,persistent:true" 2>/dev/null
+    done
+    log "  Restored persistent workspaces 11-18"
+    
+    # Get current laptop workspace and sync external to paired workspace
+    current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+    if [[ "$current_ws" -ge 1 && "$current_ws" -le 8 ]]; then
+        external_ws=$((current_ws + 10))
+        log "  Switching external to WS $external_ws (paired with laptop WS $current_ws)"
+        hyprctl dispatch focusmonitor "$EXTERNAL_MONITOR"
+        hyprctl dispatch workspace "$external_ws"
+        hyprctl dispatch focusmonitor "$LAPTOP_MONITOR"
+    fi
+    log "Sync complete"
+}
+
+# Update waybar to show/hide external monitor workspaces
+update_waybar() {
+    log "Updating waybar config..."
+    ~/.local/bin/hypr-update-waybar
+    log "Waybar updated"
+}
+
+handle() {
+    case $1 in
+        monitorremoved*)
+            monitor_name="${1#monitorremoved>>}"
+            if [[ "$monitor_name" == "$EXTERNAL_MONITOR" ]]; then
+                log "Monitor removed: $monitor_name"
+                sleep 0.5  # Brief delay for hyprland to settle
+                migrate_windows_to_laptop
+                update_waybar
+            fi
+            ;;
+        monitoradded*)
+            monitor_name="${1#monitoradded>>}"
+            if [[ "$monitor_name" == "$EXTERNAL_MONITOR" ]]; then
+                log "Monitor added: $monitor_name"
+                sleep 1  # Give monitor time to initialize
+                sync_to_current_workspace
+                update_waybar
+            fi
+            ;;
+    esac
+}
+
+# Clear old log on start
+echo "=== hypr-event-listener started $(date) ===" > "$LOG_FILE"
+log "Listening for monitor events..."
+
+# Listen to Hyprland socket events
+socat -U - UNIX-CONNECT:"$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock" | while read -r line; do
+    handle "$line"
+done

@@ -1,0 +1,27 @@
+#!/bin/bash
+# Handle gesture-based workspace switching with synchronized monitors
+# Usage: hypr-gesture-workspace next|prev
+
+DIRECTION=$1
+
+# Get current workspace on the focused monitor
+current=$(hyprctl activeworkspace -j | jq -r '.id')
+
+# Determine if we're on laptop (1-8) or external (11-18)
+if [[ $current -ge 11 ]]; then
+    base=$((current - 10))
+else
+    base=$current
+fi
+
+# Calculate new workspace
+if [[ "$DIRECTION" == "next" ]]; then
+    new_base=$((base + 1))
+    [[ $new_base -gt 8 ]] && new_base=1
+else
+    new_base=$((base - 1))
+    [[ $new_base -lt 1 ]] && new_base=8
+fi
+
+# Use existing switch script
+~/.local/bin/hypr-switch-workspace "$new_base"

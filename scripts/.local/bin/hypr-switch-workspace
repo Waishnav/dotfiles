@@ -1,0 +1,25 @@
+#!/bin/bash
+# Switch synchronized workspace pair without moving cursor
+# Usage: hypr-switch-workspace <workspace_number 1-8>
+
+WS=$1
+EXTERNAL_WS=$((WS + 10))
+
+# Save current cursor position
+cursor_pos=$(hyprctl cursorpos -j)
+cursor_x=$(echo "$cursor_pos" | jq -r '.x')
+cursor_y=$(echo "$cursor_pos" | jq -r '.y')
+
+# Check if external monitor exists
+has_external=$(hyprctl monitors -j | jq -r '.[] | select(.name == "HDMI-A-1") | .name')
+
+if [[ -n "$has_external" ]]; then
+    # Dual monitor: switch both workspaces
+    hyprctl --batch "dispatch workspace $WS; dispatch workspace $EXTERNAL_WS"
+else
+    # Laptop only: just switch the workspace
+    hyprctl dispatch workspace "$WS"
+fi
+
+# Restore cursor position
+hyprctl dispatch movecursor "$cursor_x" "$cursor_y"
