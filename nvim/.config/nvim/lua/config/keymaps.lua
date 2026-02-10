@@ -32,15 +32,13 @@ map("i", "<C-c>", "<Esc>")
 -- Disable macro recording (q is annoying)
 map("n", "q", "<nop>")
 
--- Format with LSP
+-- Format with conform (falls back to LSP)
 map("n", "<leader>f", function()
-  vim.lsp.buf.format({
-    formatting_options = {
-      tabSize = vim.opt.tabstop:get(),
-      insertSpaces = vim.opt.expandtab:get(),
-    },
+  require("conform").format({
+    lsp_fallback = true,
+    timeout_ms = 500,
   })
-end, { desc = "Format with LSP" })
+end, { desc = "Format file" })
 
 -- Quickfix navigation
 map("n", "<C-k>", "<cmd>cnext<CR>zz", { desc = "Next quickfix" })
