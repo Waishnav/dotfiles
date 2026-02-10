@@ -6,7 +6,7 @@ return {
     priority = 1000,
     config = function()
       require("cursor-dark").setup({
-        style = "dark-midnight",
+        style = "dark",
         transparent = true,
         dashboard = true,
       })
@@ -15,7 +15,7 @@ return {
   {
     "LazyVim/LazyVim",
     opts = {
-      colorscheme = "cursor-dark-midnight",
+      colorscheme = "cursor-dark",
     },
   },
 }
