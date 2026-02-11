@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Outloud
+Comment=Voice transcription recorder
+Exec=/home/waishnav/.local/bin/toggle-outloud
+Terminal=false
+Type=Application
+Icon=/home/waishnav/personal/tools/outloud/extension/icons/icon128.png
+StartupNotify=false
+Categories=Utility;Audio;

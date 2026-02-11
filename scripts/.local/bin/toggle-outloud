@@ -1,0 +1,44 @@
+#!/bin/bash
+# Toggle the Outloud Chrome extension recorder window.
+# - If it exists and is focused → hide it (send to special workspace)
+# - If it exists but not focused → bring to current workspace, center-bottom on active monitor
+# - If it doesn't exist → open it via Brave
+
+EXT_ID="biodaehjoiloffjkhkpbikhlahokngpk"
+
+ADDR=$(hyprctl clients -j | jq -r ".[] | select(.class | startswith(\"brave-${EXT_ID}\")) | .address")
+
+if [ -z "$ADDR" ]; then
+    brave --app="chrome-extension://${EXT_ID}/recorder.html" &
+    exit 0
+fi
+
+ACTIVE=$(hyprctl activewindow -j | jq -r '.address')
+
+if [ "$ADDR" = "$ACTIVE" ]; then
+    hyprctl dispatch movetoworkspacesilent special:outloud,address:"$ADDR"
+else
+    # Get active monitor geometry
+    MONITOR=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true)')
+    MON_X=$(echo "$MONITOR" | jq -r '.x')
+    MON_Y=$(echo "$MONITOR" | jq -r '.y')
+    MON_W=$(echo "$MONITOR" | jq -r '.width')
+    MON_H=$(echo "$MONITOR" | jq -r '.height')
+    MON_SCALE=$(echo "$MONITOR" | jq -r '.scale')
+
+    # Scale-adjusted dimensions
+    SCALED_W=$(echo "$MON_W $MON_SCALE" | awk '{printf "%d", $1/$2}')
+    SCALED_H=$(echo "$MON_H $MON_SCALE" | awk '{printf "%d", $1/$2}')
+
+    # Fixed window size, center-bottom on active monitor
+    WIN_W=150
+    WIN_H=54
+    POS_X=$(( MON_X + (SCALED_W - WIN_W) / 2 ))
+    POS_Y=$(( MON_Y + SCALED_H - WIN_H - 20 ))
+
+    hyprctl --batch "\
+        dispatch movetoworkspace e+0,address:$ADDR; \
+        dispatch focuswindow address:$ADDR; \
+        dispatch movewindowpixel exact $POS_X $POS_Y,address:$ADDR; \
+        dispatch alterzorder top,address:$ADDR"
+fi
