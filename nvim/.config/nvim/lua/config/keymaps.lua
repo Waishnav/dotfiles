@@ -74,6 +74,16 @@ map("n", "<A-j>", "<C-w>j", { desc = "Window down" })
 -- Search selection in visual mode
 map("x", "<leader>f", "y/<C-R>=escape(@\", '/')<CR><CR>", { noremap = false, silent = false, desc = "Search selection" })
 
+-- Global live search (live_grep) using snacks picker
+map("n", "<leader>ls", function()
+  Snacks.picker.grep({ hidden = true })
+end, { desc = "Global live search" })
+
+-- Find files (from old config - <leader>sf)
+map("n", "<leader>sf", function()
+  Snacks.picker.files({ hidden = true })
+end, { desc = "Find files" })
+
 -- Toggle indent between 2 and 4 spaces
 map("n", "<leader>ti", function()
   if vim.opt.shiftwidth:get() == 2 then
@@ -91,3 +101,5 @@ end, { desc = "Toggle indent 2/4" })
 
 -- File explorer (netrw style, but LazyVim uses neo-tree)
 map("n", "<leader>vp", vim.cmd.Ex, { desc = "Open netrw" })
+
+
