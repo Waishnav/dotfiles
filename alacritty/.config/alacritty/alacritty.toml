@@ -7,7 +7,7 @@ TERM = "xterm-256color"
 normal = { family = "JetBrainsMono Nerd Font", style = "Regular" }
 bold = { family = "JetBrainsMono Nerd Font", style = "Bold" }
 italic = { family = "JetBrainsMono Nerd Font", style = "Italic" }
-size = 9
+size = 12
 
 [window]
 padding.x = 14
@@ -17,5 +17,6 @@ decorations = "None"
 [keyboard]
 bindings = [
 { key = "Insert", mods = "Shift", action = "Paste" },
-{ key = "Insert", mods = "Control", action = "Copy" }
+{ key = "Insert", mods = "Control", action = "Copy" },
+{ key = "Space", mods = "Control", chars = "\u0000" }
 ]
