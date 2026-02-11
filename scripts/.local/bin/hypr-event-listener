@@ -70,6 +70,10 @@ handle() {
             if [[ "$monitor_name" == "$EXTERNAL_MONITOR" ]]; then
                 log "Monitor removed: $monitor_name"
                 sleep 0.5  # Brief delay for hyprland to settle
+                # Save external window layout before migrating
+                log "Saving external workspace layout..."
+                ~/.local/bin/hypr-save-layout
+                log "Layout saved"
                 migrate_windows_to_laptop
                 update_waybar
             fi
@@ -80,6 +84,10 @@ handle() {
                 log "Monitor added: $monitor_name"
                 sleep 1  # Give monitor time to initialize
                 sync_to_current_workspace
+                # Restore windows to their original external workspaces
+                log "Restoring external workspace layout..."
+                ~/.local/bin/hypr-restore-layout
+                log "Layout restored"
                 update_waybar
             fi
             ;;

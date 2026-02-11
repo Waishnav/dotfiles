@@ -1,0 +1,24 @@
+#!/bin/bash
+# Save the current window layout on external workspaces (11-18)
+# Captures: window class, title, workspace, floating state, size, position
+# Saved to a JSON file so hypr-restore-layout can recover it on reconnect
+
+LAYOUT_FILE="/tmp/hypr-external-layout.json"
+EXTERNAL_WS_MIN=11
+EXTERNAL_WS_MAX=18
+
+# Get all clients and filter to external workspaces only
+hyprctl clients -j | jq -c \
+  "[.[] | select(.workspace.id >= $EXTERNAL_WS_MIN and .workspace.id <= $EXTERNAL_WS_MAX) | {
+    class: .class,
+    title: .title,
+    workspace: .workspace.id,
+    floating: .floating,
+    x: .at[0],
+    y: .at[1],
+    w: .size[0],
+    h: .size[1]
+  }]" > "$LAYOUT_FILE"
+
+count=$(jq 'length' "$LAYOUT_FILE")
+echo "Saved $count window(s) to $LAYOUT_FILE"
