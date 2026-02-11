@@ -1,95 +1,178 @@
 @import "../omarchy/current/theme/waybar.css";
 
-* {
-  background-color: @background;
-  color: @foreground;
+/* ── Gruvbox extended palette ────────────────────────── */
+@define-color surface #3c3836;
+@define-color accent #7daea3;
+@define-color red #ea6962;
+@define-color yellow #d8a657;
+@define-color green #a9b665;
 
+/* ── Base reset ──────────────────────────────────────── */
+* {
   border: none;
   border-radius: 0;
   min-height: 0;
+  min-width: 0;
   font-family: 'JetBrainsMono Nerd Font';
-  font-size: 12px;
+  font-size: 14px;
+  color: @foreground;
+  background-color: transparent;
 }
 
+window#waybar {
+  background-color: transparent;
+}
 
+/* ── Pill containers (vertical) ──────────────────────── */
+#launcher,
+#workspaces-pill,
+#center-pill,
+#tray-expander,
+#connectivity,
+#system {
+  background-color: alpha(@background, 0.88);
+  border: 1px solid alpha(@surface, 0.6);
+  border-radius: 12px;
+  padding: 6px 2px;
+  margin: 3px 4px;
+}
 
+/* ── Section margins (top/bottom in vertical mode) ──── */
 .modules-left {
-  margin-left: 8px;
+  margin-top: 2px;
 }
 
 .modules-right {
-  margin-right: 8px;
+  margin-bottom: 2px;
+}
+
+/* ── Launcher ────────────────────────────────────────── */
+#launcher {
+  padding: 10px 2px;
+}
+
+#custom-omarchy {
+  font-size: 18px;
+  color: @accent;
+  padding: 2px 0;
+}
+
+/* ── Workspaces (vertical stack) ─────────────────────── */
+#workspaces {
+  padding: 0;
 }
 
 #workspaces button {
   all: initial;
-  padding: 0 6px;
-  margin: 0 1.5px;
-  min-width: 9px;
+  color: @foreground;
+  font-family: 'JetBrainsMono Nerd Font';
+  font-size: 13px;
+  padding: 4px 0;
+  margin: 1px 0;
+  min-width: 24px;
+  min-height: 20px;
+  border-radius: 8px;
+  transition: all 200ms ease;
 }
 
 #workspaces button.empty {
-  opacity: 0.5;
+  opacity: 0.3;
 }
 
+#workspaces button.visible {
+  color: @accent;
+}
+
+#workspaces button.active {
+  color: #282828;
+  background-color: @accent;
+  font-weight: bold;
+  border-radius: 8px;
+}
+
+#workspaces button:hover {
+  background-color: alpha(@foreground, 0.12);
+}
+
+/* ── Clock (stacked HH / MM) ────────────────────────── */
+#clock {
+  padding: 4px 0;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+/* ── System module icons ─────────────────────────────── */
 #cpu,
 #battery,
 #pulseaudio,
-#custom-omarchy,
-#custom-screenrecording-indicator,
-#custom-update {
-  min-width: 12px;
-  margin: 0 7.5px;
-}
-
-#tray {
-  margin-right: 16px;
-}
-
-#bluetooth {
-  margin-right: 17px;
-}
-
+#bluetooth,
 #network {
-  margin-right: 13px;
+  font-size: 15px;
+  padding: 6px 0;
 }
 
-#custom-expand-icon {
-  margin-right: 18px;
+/* ── Battery states ──────────────────────────────────── */
+#battery.warning {
+  color: @yellow;
 }
 
-tooltip {
-  padding: 2px;
+#battery.critical {
+  color: @red;
+  animation: pulse 1s steps(8) infinite alternate;
 }
 
+@keyframes pulse {
+  to { opacity: 0.5; }
+}
+
+/* ── Custom modules ──────────────────────────────────── */
 #custom-update {
-  font-size: 10px;
-}
-
-#clock {
-  margin-left: 8.75px;
-}
-
-.hidden {
-  opacity: 0;
+  font-size: 14px;
+  padding: 4px 0;
 }
 
 #custom-screenrecording-indicator {
-  min-width: 12px;
-  margin-left: 5px;
-  font-size: 10px;
-  padding-bottom: 1px;
+  font-size: 14px;
+  padding: 4px 0;
 }
 
 #custom-screenrecording-indicator.active {
-  color: #a55555;
+  color: @red;
 }
 
 #custom-voxtype {
-  min-width: 12px;
-  margin: 0 0 0 7.5px;
+  font-size: 15px;
+  padding: 4px 0;
 }
 
 #custom-voxtype.recording {
-  color: #a55555;
+  color: @red;
+}
+
+/* ── Tray ─────────────────────────────────────────────── */
+#tray {
+  padding: 4px 0;
+}
+
+#custom-expand-icon {
+  font-size: 15px;
+  padding: 4px 0;
+}
+
+/* ── Tooltips ─────────────────────────────────────────── */
+tooltip {
+  background-color: alpha(@background, 0.95);
+  border: 1px solid @surface;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+tooltip label {
+  color: @foreground;
+  font-size: 13px;
+}
+
+/* ── Utility ──────────────────────────────────────────── */
+.hidden {
+  opacity: 0;
 }
