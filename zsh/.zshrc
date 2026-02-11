@@ -118,6 +118,7 @@ n() { if [ "$#" -eq 0 ]; then nvim .; else nvim "$@"; fi; }
 alias oc='opencode'
 alias cc='claude'
 alias ldf='lume diff --file-panel-pos bottom'
+alias la='ls -la'
 
 # Claude Code with Antigravity Proxy
 alias ccap='ANTHROPIC_AUTH_TOKEN="test" \
