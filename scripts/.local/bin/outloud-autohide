@@ -1,0 +1,26 @@
+#!/bin/bash
+# Auto-hide Outloud recorder when focus moves to another window.
+# Listens to Hyprland IPC activewindow events.
+
+EXT_PREFIX="brave-biodaehjoiloffjkhkpbikhlahokngpk"
+SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+socat -U - UNIX-CONNECT:"$SOCKET" | while read -r line; do
+    # Only react to focus changes
+    [[ "$line" != activewindowv2* ]] && continue
+
+    # Check if Outloud window exists on a regular workspace
+    OUTLOUD=$(hyprctl clients -j | jq -r ".[] | select(.class | startswith(\"$EXT_PREFIX\"))")
+    [ -z "$OUTLOUD" ] && continue
+
+    WS=$(echo "$OUTLOUD" | jq -r '.workspace.name')
+    [[ "$WS" == special:* ]] && continue
+
+    # Outloud is visible — check if it's still the focused window
+    OUTLOUD_ADDR=$(echo "$OUTLOUD" | jq -r '.address')
+    ACTIVE_ADDR=$(hyprctl activewindow -j | jq -r '.address')
+
+    if [ "$OUTLOUD_ADDR" != "$ACTIVE_ADDR" ]; then
+        hyprctl dispatch movetoworkspacesilent special:outloud,address:"$OUTLOUD_ADDR"
+    fi
+done
