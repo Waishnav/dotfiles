@@ -27,8 +27,10 @@ window#waybar {
 #launcher,
 #workspaces-pill,
 #center-pill,
+#utilities,
 #tray-expander,
-#connectivity,
+#notifications,
+#media-connectivity,
 #system {
   background-color: alpha(@background, 0.88);
   border: 1px solid alpha(@surface, 0.6);
@@ -103,7 +105,9 @@ window#waybar {
 
 /* ── System module icons ─────────────────────────────── */
 #cpu,
+#memory,
 #battery,
+#backlight,
 #pulseaudio,
 #bluetooth,
 #network {
@@ -146,6 +150,56 @@ window#waybar {
 }
 
 #custom-voxtype.recording {
+  color: @red;
+}
+
+/* ── Media player (MPRIS) ────────────────────────────── */
+#mpris {
+  font-size: 15px;
+  padding: 4px 0;
+}
+
+#mpris.playing {
+  color: @green;
+}
+
+#mpris.paused {
+  color: @yellow;
+  opacity: 0.7;
+}
+
+/* ── Clipboard ───────────────────────────────────────── */
+#custom-clipboard {
+  font-size: 15px;
+  padding: 6px 0;
+}
+
+#custom-clipboard:hover {
+  color: @accent;
+}
+
+/* ── Notifications ───────────────────────────────────── */
+#custom-notification {
+  font-size: 15px;
+  padding: 6px 0;
+}
+
+#custom-notification.active {
+  color: @accent;
+  animation: pulse 2s ease-in-out infinite alternate;
+}
+
+#custom-notification.dnd {
+  color: @red;
+  opacity: 0.7;
+}
+
+/* ── Memory ──────────────────────────────────────────── */
+#memory.warning {
+  color: @yellow;
+}
+
+#memory.critical {
   color: @red;
 }
 

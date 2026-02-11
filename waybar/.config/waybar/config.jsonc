@@ -17,7 +17,9 @@
   ],
   "modules-right": [
     "group/tray-expander",
-    "group/connectivity",
+    "group/notifications",
+    "group/utilities",
+    "group/media-connectivity",
     "group/system"
   ],
 
@@ -40,6 +42,14 @@
       "custom/screenrecording-indicator"
     ]
   },
+  "group/utilities": {
+    "orientation": "inherit",
+    "modules": ["custom/clipboard"]
+  },
+  "group/notifications": {
+    "orientation": "inherit",
+    "modules": ["custom/notification"]
+  },
   "group/tray-expander": {
     "orientation": "inherit",
     "drawer": {
@@ -51,13 +61,13 @@
       "tray"
     ]
   },
-  "group/connectivity": {
+  "group/media-connectivity": {
     "orientation": "inherit",
-    "modules": ["bluetooth", "network"]
+    "modules": ["pulseaudio", "mpris", "bluetooth", "network"]
   },
   "group/system": {
     "orientation": "inherit",
-    "modules": ["pulseaudio", "cpu", "battery"]
+    "modules": ["backlight", "cpu", "memory", "battery"]
   },
 
   // ── Module configs ───────────────────────────────────
@@ -110,8 +120,58 @@
   "cpu": {
     "interval": 5,
     "format": "󰍛",
+    "tooltip-format": "CPU: {usage}%",
     "on-click": "omarchy-launch-or-focus-tui btop",
     "on-click-right": "alacritty"
+  },
+  "memory": {
+    "interval": 10,
+    "format": "󰘚",
+    "tooltip-format": "RAM: {used:0.1f}G / {total:0.1f}G ({percentage}%)",
+    "on-click": "omarchy-launch-or-focus-tui btop"
+  },
+  "backlight": {
+    "format": "{icon}",
+    "format-icons": ["󰃞", "󰃟", "󰃠"],
+    "tooltip-format": "Brightness: {percent}%",
+    "scroll-step": 5,
+    "on-click": "brightnessctl set 50%",
+    "on-scroll-up": "brightnessctl set +5%",
+    "on-scroll-down": "brightnessctl set 5%-"
+  },
+  "mpris": {
+    "format": "{status_icon}",
+    "format-paused": "{status_icon}",
+    "format-stopped": "",
+    "format-disconnected": "",
+    "status-icons": {
+      "playing": "󰐊",
+      "paused": "󰏤"
+    },
+    "tooltip-format": "{artist} — {title}\n{album}",
+    "on-click": "playerctl play-pause",
+    "on-scroll-up": "playerctl next",
+    "on-scroll-down": "playerctl previous",
+    "interval": 1
+  },
+  "custom/clipboard": {
+    "format": "󰅇",
+    "tooltip-format": "Clipboard History",
+    "on-click": "waybar-clipboard"
+  },
+  "custom/notification": {
+    "exec": "waybar-mako-indicator",
+    "return-type": "json",
+    "format": "{icon}",
+    "format-icons": {
+      "none": "󰂚",
+      "active": "󰂞",
+      "dnd": "󰂛"
+    },
+    "tooltip": true,
+    "interval": 5,
+    "on-click": "makoctl dismiss -a",
+    "on-click-right": "makoctl mode -t do-not-disturb"
   },
   "clock": {
     "format": "{:%H\n%M}",
