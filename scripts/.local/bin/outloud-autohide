@@ -1,9 +1,46 @@
 #!/bin/bash
 # Auto-hide Outloud recorder when focus moves to another window.
 # Listens to Hyprland IPC activewindow events.
+# Now with a 3-second delay before hiding.
 
 EXT_PREFIX="brave-biodaehjoiloffjkhkpbikhlahokngpk"
 SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+# Delay before hiding (in seconds)
+HIDE_DELAY=3
+
+# Track the hide timer PID
+HIDE_TIMER_PID=""
+
+# Function to cancel pending hide
+function cancel_hide_timer() {
+    if [ -n "$HIDE_TIMER_PID" ] && kill -0 "$HIDE_TIMER_PID" 2>/dev/null; then
+        kill "$HIDE_TIMER_PID" 2>/dev/null
+        HIDE_TIMER_PID=""
+    fi
+}
+
+# Function to schedule hide
+function schedule_hide() {
+    local addr="$1"
+    # Cancel any existing timer
+    cancel_hide_timer
+    # Start a new timer in background
+    (
+        sleep "$HIDE_DELAY"
+        # Double-check Outloud is still not focused before hiding
+        OUTLOUD=$(hyprctl clients -j | jq -r ".[] | select(.class | startswith(\"$EXT_PREFIX\"))")
+        [ -z "$OUTLOUD" ] && exit 0
+        WS=$(echo "$OUTLOUD" | jq -r '.workspace.name')
+        [[ "$WS" == special:* ]] && exit 0
+        OUTLOUD_ADDR=$(echo "$OUTLOUD" | jq -r '.address')
+        ACTIVE_ADDR=$(hyprctl activewindow -j | jq -r '.address')
+        if [ "$OUTLOUD_ADDR" != "$ACTIVE_ADDR" ]; then
+            hyprctl dispatch movetoworkspacesilent special:outloud,address:"$OUTLOUD_ADDR"
+        fi
+    ) &
+    HIDE_TIMER_PID=$!
+}
 
 socat -U - UNIX-CONNECT:"$SOCKET" | while read -r line; do
     # Only react to focus changes
@@ -20,7 +57,11 @@ socat -U - UNIX-CONNECT:"$SOCKET" | while read -r line; do
     OUTLOUD_ADDR=$(echo "$OUTLOUD" | jq -r '.address')
     ACTIVE_ADDR=$(hyprctl activewindow -j | jq -r '.address')
 
-    if [ "$OUTLOUD_ADDR" != "$ACTIVE_ADDR" ]; then
-        hyprctl dispatch movetoworkspacesilent special:outloud,address:"$OUTLOUD_ADDR"
+    if [ "$OUTLOUD_ADDR" == "$ACTIVE_ADDR" ]; then
+        # Focus returned to Outloud — cancel any pending hide
+        cancel_hide_timer
+    elif [ -z "$HIDE_TIMER_PID" ] || ! kill -0 "$HIDE_TIMER_PID" 2>/dev/null; then
+        # Focus left Outloud and no timer running — schedule hide
+        schedule_hide "$OUTLOUD_ADDR"
     fi
 done
