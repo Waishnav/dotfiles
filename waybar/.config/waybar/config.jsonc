@@ -157,7 +157,7 @@
   "custom/clipboard": {
     "format": "󰅇",
     "tooltip-format": "Clipboard History",
-    "on-click": "waybar-clipboard"
+    "on-click": "/home/waishnav/.local/bin/waybar-clipboard"
   },
   "custom/notification": {
     "exec": "waybar-mako-indicator",
