@@ -60,6 +60,10 @@ window#waybar {
 }
 
 /* ── Workspaces (vertical stack) ─────────────────────── */
+#workspaces-pill {
+  padding: 6px 2px;
+}
+
 #workspaces {
   padding: 0;
 }
