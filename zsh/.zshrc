@@ -118,6 +118,7 @@ n() { if [ "$#" -eq 0 ]; then nvim .; else nvim "$@"; fi; }
 # --- Custom Aliases ---
 alias oc='opencode'
 alias cc='claude'
+alias cx='codex --yolo'
 alias ldf='lume diff --file-panel-pos bottom'
 alias la='ls -la'
 
