@@ -67,6 +67,7 @@ export PATH="$HOME/.amp/bin:$PATH"
 
 # Cargo/Rust (if installed)
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+export PATH="$HOME/.cargo/bin:$PATH"
 
 # Bun (if installed)
 export BUN_INSTALL="$HOME/.bun"
@@ -119,6 +120,9 @@ alias oc='opencode'
 alias cc='claude'
 alias ldf='lume diff --file-panel-pos bottom'
 alias la='ls -la'
+
+alias oc-haiku='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-haiku-4.5"}}}'"'"' opencode'
+alias oc-kimi='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"opencode/kimi-k2.5-free"}}}'"'"' opencode'
 
 # Claude Code with Antigravity Proxy
 alias ccap='ANTHROPIC_AUTH_TOKEN="test" \
