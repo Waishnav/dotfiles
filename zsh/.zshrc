@@ -166,3 +166,5 @@ ask_hard() {
   opencode run -m github-copilot/gpt-5-mini --agent general \
     "$prompt" 2>/dev/null | glow -
 }
+
+export OPENCODE_EXPERIMENTAL_MARKDOWN=1
