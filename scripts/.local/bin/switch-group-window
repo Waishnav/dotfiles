@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# switch-group-window: Switch to a specific window in the current group by index
+# Usage: switch-group-window <index>
+
+set -euo pipefail
+
+INDEX="${1:-1}"
+
+# Get the active window's grouped windows
+GROUPED=$(hyprctl activewindow -j 2>/dev/null | jq -r '.grouped[] // empty' 2>/dev/null || true)
+
+if [[ -z "$GROUPED" ]]; then
+    # Not in a group, try getting from workspace
+    WORKSPACE_GROUPED=$(hyprctl workspaces -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .grouped[] // empty' 2>/dev/null || true)
+    if [[ -z "$WORKSPACE_GROUPED" ]]; then
+        exit 0
+    fi
+    GROUPED="$WORKSPACE_GROUPED"
+fi
+
+# Convert to array
+mapfile -t GROUPED_WINDOWS <<< "$GROUPED"
+
+# Get the window at the target index (1-based input, 0-based array)
+TARGET_INDEX=$((INDEX - 1))
+
+if [[ -z "${GROUPED_WINDOWS[$TARGET_INDEX]:-}" ]]; then
+    exit 0
+fi
+
+TARGET_ADDR="${GROUPED_WINDOWS[$TARGET_INDEX]}"
+
+if [[ -n "$TARGET_ADDR" && "$TARGET_ADDR" != "null" ]]; then
+    hyprctl dispatch focuswindow "address:$TARGET_ADDR"
+fi
