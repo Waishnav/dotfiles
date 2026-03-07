@@ -6,3 +6,7 @@
 --
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
+
+-- Remove LazyVim's wrap+spell autocmd for markdown/text filetypes.
+-- LazyVim forces wrap=true on markdown which breaks markview.nvim table rendering.
+vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
