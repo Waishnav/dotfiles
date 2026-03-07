@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+APP_DIR="/home/waishnav/.local/share/tmux-sidebar-ui"
+
+exec bun run "$APP_DIR/index.ts"

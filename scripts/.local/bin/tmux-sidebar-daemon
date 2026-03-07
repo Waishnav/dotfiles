@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# tmux-sidebar-daemon: Manages sidebar visibility
+# - Shows sidebar when cursor hits left screen edge
+# - Hides sidebar when user focuses another window and STAYS there
+#   (not on brief follow_mouse hover flickers)
+
+EDGE_THRESHOLD=3
+SIDEBAR_WIDTH=250
+GAP=10
+POLL_INTERVAL=0.2
+# How long focus must stay on a non-sidebar window before we hide (seconds)
+COMMIT_THRESHOLD=0.8
+STATE_FILE="/tmp/tmux-sidebar-state"
+LOCK_FILE="/tmp/tmux-sidebar-daemon.lock"
+CLASS="sidebar-tui"
+SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "Sidebar daemon already running" >&2
+    exit 1
+fi
+
+cleanup() {
+    kill $IPC_PID $EDGE_PID 2>/dev/null
+    rm -f "$LOCK_FILE"
+    exit 0
+}
+trap cleanup EXIT INT TERM
+
+get_state() {
+    cat "$STATE_FILE" 2>/dev/null || echo "hidden"
+}
+
+get_sidebar_addr() {
+    hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.class == \"$CLASS\") | .address" | head -1
+}
+
+# ── IPC listener: track when focus leaves sidebar ──
+# When focus moves to a non-sidebar window and STAYS there for COMMIT_THRESHOLD,
+# the user has "committed" to that window -> hide sidebar.
+ipc_listener() {
+    local away_since=""
+
+    socat -u "UNIX-CONNECT:$SOCKET" - 2>/dev/null | while IFS= read -r event; do
+        # Only care about activewindowv2 events
+        [[ "$event" != activewindowv2\>\>* ]] && continue
+
+        local state
+        state=$(get_state)
+        [[ "$state" != "visible" ]] && continue
+
+        local focused_addr="${event#activewindowv2>>}"
+        local sidebar_addr
+        sidebar_addr=$(get_sidebar_addr)
+        sidebar_addr="${sidebar_addr#0x}"
+
+        if [[ -n "$focused_addr" && "$focused_addr" != "$sidebar_addr" ]]; then
+            # Focus moved away from sidebar
+            if [[ -z "$away_since" ]]; then
+                away_since=$(date +%s%N)
+            else
+                # Check how long focus has been away
+                local now elapsed_ms
+                now=$(date +%s%N)
+                elapsed_ms=$(( (now - away_since) / 1000000 ))
+                local threshold_ms=$(echo "$COMMIT_THRESHOLD * 1000" | bc 2>/dev/null | cut -d. -f1)
+                threshold_ms=${threshold_ms:-800}
+
+                if (( elapsed_ms >= threshold_ms )); then
+                    ~/.local/bin/tmux-sidebar-toggle hide
+                    away_since=""
+                fi
+            fi
+        else
+            # Focus returned to sidebar, reset timer
+            away_since=""
+        fi
+    done
+}
+
+# ── Edge hover: show sidebar when cursor hits left edge ──
+edge_listener() {
+    while true; do
+        local state
+        state=$(get_state)
+
+        if [[ "$state" == "hidden" ]]; then
+            local cursor_x
+            cursor_x=$(hyprctl cursorpos -j 2>/dev/null | jq -r '.x' 2>/dev/null || echo 9999)
+            local mon_x
+            mon_x=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .x' | head -1)
+            mon_x=${mon_x:-0}
+
+            if (( cursor_x <= mon_x + EDGE_THRESHOLD )); then
+                ~/.local/bin/tmux-sidebar-toggle show
+                sleep 0.5
+            fi
+        fi
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+ipc_listener &
+IPC_PID=$!
+
+edge_listener &
+EDGE_PID=$!
+
+wait
