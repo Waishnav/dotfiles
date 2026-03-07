@@ -122,8 +122,9 @@ alias cx='codex --yolo'
 alias ldf='lume diff --file-panel-pos bottom'
 alias la='ls -la'
 
-alias oc-haiku='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-haiku-4.5"}}}'"'"' opencode'
-alias oc-kimi='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"opencode/kimi-k2.5-free"}}}'"'"' opencode'
+alias och='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-haiku-4.5","prompt": "{file:/home/waishnav/.config/opencode/prompts/explore-haikyu.txt}"}},"compaction":{"reserved":15000}}'"'"' opencode'
+alias ocs='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-sonnet-4.5","prompt": "{file:/home/waishnav/.config/opencode/prompts/explore-haikyu.txt}"}},"compaction":{"reserved":15000}}'"'"' opencode'
+alias ock='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"opencode/kimi-k2.5-free"}}}'"'"' opencode'
 
 # Claude Code with Antigravity Proxy
 alias ccap='ANTHROPIC_AUTH_TOKEN="test" \
