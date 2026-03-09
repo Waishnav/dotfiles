@@ -190,7 +190,7 @@ class SidebarApp {
         return
       }
       if (key.name === "escape") {
-        void this.hideSidebar()
+        void this.focusPreviousWindow()
         return
       }
       if (key.name === "g") {
@@ -489,7 +489,7 @@ class SidebarApp {
     } else {
       await $`tmux switch-client -t ${target}`.quiet().nothrow()
     }
-    await this.hideSidebar()
+    await this.focusPreviousWindow()
   }
 
   private async fetchPrimaryClientTty(): Promise<string> {
@@ -514,8 +514,8 @@ class SidebarApp {
     }
   }
 
-  private async hideSidebar() {
-    await $`/home/waishnav/.local/bin/tmux-sidebar-toggle hide`.quiet().nothrow()
+  private async focusPreviousWindow() {
+    await $`hyprctl dispatch focuscurrentorlast`.quiet().nothrow()
   }
 }
 

@@ -122,7 +122,7 @@ alias cx='codex --yolo'
 alias ldf='lume diff --file-panel-pos bottom'
 alias la='ls -la'
 
-alias och='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-haiku-4.5","prompt": "{file:/home/waishnav/.config/opencode/prompts/explore-haikyu.txt}"}},"compaction":{"reserved":15000}}'"'"' opencode'
+alias och='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"anthropic/claude-haiku-4-5","prompt": "{file:/home/waishnav/.config/opencode/prompts/explore-haikyu.txt}"}},"compaction":{"reserved":15000}}'"'"' opencode'
 alias ocs='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"github-copilot/claude-sonnet-4.5","prompt": "{file:/home/waishnav/.config/opencode/prompts/explore-haikyu.txt}"}},"compaction":{"reserved":15000}}'"'"' opencode'
 alias ock='OPENCODE_CONFIG_CONTENT='"'"'{"agent":{"explore":{"model":"opencode/kimi-k2.5-free"}}}'"'"' opencode'
 

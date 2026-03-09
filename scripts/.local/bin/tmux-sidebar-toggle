@@ -1,33 +1,15 @@
 #!/usr/bin/env bash
-# tmux-sidebar-toggle: Show/hide the tmux sidebar window
-# Positions it at the left edge with same padding as tiled windows
-# Moves sidebar to current workspace on show (works across all workspaces)
+# tmux-sidebar-toggle: Launch or focus the tmux sidebar tiled window
+#
+# First call:  launches alacritty with sidebar-tui class (tiles on current workspace)
+# Next calls:  focuses the existing sidebar window
+#
+# Old overlay functions (show/hide/slide) kept below for reference.
 
-SIDEBAR_WIDTH=250
-GAP=10
-STATE_FILE="/tmp/tmux-sidebar-state"
 CLASS="sidebar-tui"
 
 get_sidebar_addr() {
     hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.class == \"$CLASS\") | .address" | head -1
-}
-
-get_monitor() {
-    hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | "\(.x) \(.y) \(.height)"' | head -1
-}
-
-get_active_workspace() {
-    hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .activeWorkspace.id' | head -1
-}
-
-ensure_pinned() {
-    local addr=$1
-    local pinned
-    pinned=$(hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.address == \"$addr\") | .pinned")
-    if [[ "$pinned" != "true" ]]; then
-        hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
-        hyprctl dispatch pin "address:$addr" >/dev/null 2>&1
-    fi
 }
 
 launch_sidebar() {
@@ -43,25 +25,16 @@ launch_sidebar() {
     done
     [[ -z "$addr" ]] && return 1
 
-    local mon_x mon_y mon_h
-    read -r mon_x mon_y mon_h <<< "$(get_monitor)"
-    local sidebar_h=$(( mon_h - GAP * 2 ))
-
-    # Float + resize
+    # Move sidebar to the left and shrink it
+    sleep 0.2
     hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
-    hyprctl dispatch setfloating "address:$addr" >/dev/null 2>&1
-    sleep 0.15
-    hyprctl dispatch resizewindowpixel "exact $SIDEBAR_WIDTH $sidebar_h,address:$addr" >/dev/null 2>&1
-    # Pin (back-to-back with focus)
-    hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
-    hyprctl dispatch pin "address:$addr" >/dev/null 2>&1
-    # Start hidden
-    hyprctl dispatch movewindowpixel "exact $((mon_x - SIDEBAR_WIDTH - 10)) $((mon_y + GAP)),address:$addr" >/dev/null 2>&1
+    hyprctl dispatch swapnext >/dev/null 2>&1
+    hyprctl dispatch resizeactive -900 0 >/dev/null 2>&1
 
     echo "$addr"
 }
 
-show() {
+focus_or_launch() {
     local addr
     addr=$(get_sidebar_addr)
 
@@ -70,59 +43,77 @@ show() {
         [[ -z "$addr" ]] && exit 1
     fi
 
-    local mon_x mon_y mon_h
-    read -r mon_x mon_y mon_h <<< "$(get_monitor)"
-
-    # Move sidebar to current workspace first (in case pin failed)
-    local ws
-    ws=$(get_active_workspace)
-    hyprctl dispatch movetoworkspacesilent "$ws,address:$addr" >/dev/null 2>&1
-
-    # Ensure it's floating (might have been un-floated)
-    local is_floating
-    is_floating=$(hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.address == \"$addr\") | .floating")
-    if [[ "$is_floating" != "true" ]]; then
-        hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
-        hyprctl dispatch setfloating "address:$addr" >/dev/null 2>&1
-    fi
-
-    # Position at left edge with gap
-    hyprctl dispatch movewindowpixel "exact $((mon_x + GAP)) $((mon_y + GAP)),address:$addr" >/dev/null 2>&1
     hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
-
-    # Try to pin (so it stays across workspaces while visible)
-    ensure_pinned "$addr"
-
-    echo "visible" > "$STATE_FILE"
 }
 
-hide() {
-    local addr
-    addr=$(get_sidebar_addr)
-    [[ -z "$addr" ]] && { echo "hidden" > "$STATE_FILE"; exit 0; }
+focus_or_launch
 
-    local mon_x mon_y mon_h
-    read -r mon_x mon_y mon_h <<< "$(get_monitor)"
-
-    # Slide off-screen to the left
-    hyprctl dispatch movewindowpixel "exact $((mon_x - SIDEBAR_WIDTH - 10)) $((mon_y + GAP)),address:$addr" >/dev/null 2>&1
-
-    echo "hidden" > "$STATE_FILE"
-}
-
-toggle() {
-    local state
-    state=$(cat "$STATE_FILE" 2>/dev/null || echo "hidden")
-    if [[ "$state" == "visible" ]]; then
-        hide
-    else
-        show
-    fi
-}
-
-case "${1:-toggle}" in
-    show)   show ;;
-    hide)   hide ;;
-    toggle) toggle ;;
-    *)      echo "Usage: tmux-sidebar-toggle [show|hide|toggle]" ;;
-esac
+# ── Old overlay functions (kept for reference) ──
+# SIDEBAR_WIDTH=250
+# GAP=10
+# STATE_FILE="/tmp/tmux-sidebar-state"
+#
+# get_monitor() {
+#     hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | "\(.x) \(.y) \(.height)"' | head -1
+# }
+#
+# get_active_workspace() {
+#     hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .activeWorkspace.id' | head -1
+# }
+#
+# ensure_pinned() {
+#     local addr=$1
+#     local pinned
+#     pinned=$(hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.address == \"$addr\") | .pinned")
+#     if [[ "$pinned" != "true" ]]; then
+#         hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+#         hyprctl dispatch pin "address:$addr" >/dev/null 2>&1
+#     fi
+# }
+#
+# show() {
+#     local addr
+#     addr=$(get_sidebar_addr)
+#     if [[ -z "$addr" ]]; then
+#         addr=$(launch_sidebar)
+#         [[ -z "$addr" ]] && exit 1
+#     fi
+#     local mon_x mon_y mon_h
+#     read -r mon_x mon_y mon_h <<< "$(get_monitor)"
+#     local ws
+#     ws=$(get_active_workspace)
+#     hyprctl dispatch movetoworkspacesilent "$ws,address:$addr" >/dev/null 2>&1
+#     local is_floating
+#     is_floating=$(hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.address == \"$addr\") | .floating")
+#     if [[ "$is_floating" != "true" ]]; then
+#         hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+#         hyprctl dispatch setfloating "address:$addr" >/dev/null 2>&1
+#     fi
+#     hyprctl dispatch movewindowpixel "exact $((mon_x + GAP)) $((mon_y + GAP)),address:$addr" >/dev/null 2>&1
+#     hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+#     ensure_pinned "$addr"
+#     echo "visible" > "$STATE_FILE"
+# }
+#
+# hide() {
+#     local addr
+#     addr=$(get_sidebar_addr)
+#     [[ -z "$addr" ]] && { echo "hidden" > "$STATE_FILE"; exit 0; }
+#     local mon_x mon_y mon_h
+#     read -r mon_x mon_y mon_h <<< "$(get_monitor)"
+#     hyprctl dispatch movewindowpixel "exact $((mon_x - SIDEBAR_WIDTH - 10)) $((mon_y + GAP)),address:$addr" >/dev/null 2>&1
+#     echo "hidden" > "$STATE_FILE"
+# }
+#
+# toggle() {
+#     local state
+#     state=$(cat "$STATE_FILE" 2>/dev/null || echo "hidden")
+#     if [[ "$state" == "visible" ]]; then hide; else show; fi
+# }
+#
+# case "${1:-toggle}" in
+#     show)   show ;;
+#     hide)   hide ;;
+#     toggle) toggle ;;
+#     *)      echo "Usage: tmux-sidebar-toggle [show|hide|toggle]" ;;
+# esac

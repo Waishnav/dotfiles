@@ -15,7 +15,9 @@ has_external=$(hyprctl monitors -j | jq -r '.[] | select(.name == "HDMI-A-1") | 
 
 if [[ -n "$has_external" ]]; then
     # Dual monitor: switch both workspaces
-    hyprctl --batch "dispatch workspace $WS; dispatch workspace $EXTERNAL_WS"
+    # Separate calls (not batch) so focus state updates between them
+    hyprctl dispatch workspace "$WS"
+    hyprctl dispatch workspace "$EXTERNAL_WS"
 else
     # Laptop only: just switch the workspace
     hyprctl dispatch workspace "$WS"
