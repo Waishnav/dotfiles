@@ -169,3 +169,13 @@ ask_hard() {
 }
 
 export OPENCODE_EXPERIMENTAL_MARKDOWN=1
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/waishnav/.local/bin:$PATH"
+
+# >>> grok installer >>>
+export PATH="$HOME/.grok/bin:$PATH"
+fpath=(~/.grok/completions/zsh $fpath)
+autoload -Uz compinit && compinit -C
+# <<< grok installer <<<
