@@ -21,6 +21,7 @@ set -g window-status-bell-style "fg=#ea6c73 bg=#16181e bold"
 set -g clock-mode-colour "#58a6ff"
 set -g display-panes-colour "#d0d4d8"
 set -g display-panes-active-colour "#58a6ff"
+set -g status-left "#[fg=#58a6ff,bold]#S#[default] "
 EOF
 else
   cat > "$output_file" <<'EOF'
@@ -35,6 +36,7 @@ set -g window-status-bell-style "fg=#cf222e bg=#e9ecef bold"
 set -g clock-mode-colour "#0969da"
 set -g display-panes-colour "#24292f"
 set -g display-panes-active-colour "#0969da"
+set -g status-left "#[fg=#0969da,bold]#S#[default] "
 EOF
 fi
 
