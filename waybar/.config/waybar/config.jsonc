@@ -155,7 +155,7 @@
     "on-click": "/home/waishnav/.local/bin/waybar-clipboard"
   },
   "custom/notification": {
-    "exec": "waybar-mako-indicator",
+    "exec": "swaync-client -swb",
     "return-type": "json",
     "format": "{icon}",
     "format-icons": {
@@ -164,9 +164,8 @@
       "dnd": "󰂛"
     },
     "tooltip": true,
-    "interval": 5,
-    "on-click": "makoctl dismiss -a",
-    "on-click-right": "makoctl mode -t do-not-disturb"
+    "on-click": "swaync-client -t",
+    "on-click-right": "swaync-client -d"
   },
   "clock": {
     "format": "{:%H\n%M}",
