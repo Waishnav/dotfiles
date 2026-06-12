@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+sync_theme() {
+  ~/.local/bin/alacritty-theme-sync
+  ~/.local/bin/tmux-theme-sync
+}
+
+sync_theme
+
+gsettings monitor org.gnome.desktop.interface color-scheme | while IFS= read -r _; do
+  sync_theme
+done

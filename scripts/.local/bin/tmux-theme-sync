@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+current_scheme="$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)"
+current_gtk="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
+output_file="$HOME/.config/tmux/theme.conf"
+
+mkdir -p "$(dirname "$output_file")"
+
+if [[ "$current_scheme" == *"prefer-dark"* ]] || [[ "$current_gtk" == *"-dark'"* ]]; then
+  cat > "$output_file" <<'EOF'
+set -g status-style "bg=#16181e fg=#d0d4d8"
+set -g message-style "bg=#16181e fg=#d0d4d8"
+set -g mode-style "bg=#58a6ff fg=#16181e bold"
+set -g pane-border-style "fg=#454c54"
+set -g pane-active-border-style "fg=#58a6ff"
+set -g window-status-style "fg=#768390 bg=#16181e"
+set -g window-status-current-style "fg=#58a6ff bg=#16181e bold"
+set -g window-status-bell-style "fg=#ea6c73 bg=#16181e bold"
+set -g clock-mode-colour "#58a6ff"
+set -g display-panes-colour "#d0d4d8"
+set -g display-panes-active-colour "#58a6ff"
+EOF
+else
+  cat > "$output_file" <<'EOF'
+set -g status-style "bg=#e9ecef fg=#24292f"
+set -g message-style "bg=#e9ecef fg=#24292f"
+set -g mode-style "bg=#0969da fg=#e9ecef bold"
+set -g pane-border-style "fg=#d0d7de"
+set -g pane-active-border-style "fg=#0969da"
+set -g window-status-style "fg=#656d76 bg=#e9ecef"
+set -g window-status-current-style "fg=#0969da bg=#e9ecef bold"
+set -g window-status-bell-style "fg=#cf222e bg=#e9ecef bold"
+set -g clock-mode-colour "#0969da"
+set -g display-panes-colour "#24292f"
+set -g display-panes-active-colour "#0969da"
+EOF
+fi
+
+if tmux display-message -p '' >/dev/null 2>&1; then
+  tmux source-file "$output_file" >/dev/null 2>&1 || true
+fi

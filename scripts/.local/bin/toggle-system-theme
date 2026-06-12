@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+disable_brave_managed_theme() {
+  local brave_policy_file="/etc/brave/policies/managed/color.json"
+  if [[ -f "$brave_policy_file" ]]; then
+    rm -f "$brave_policy_file"
+    if command -v brave >/dev/null 2>&1; then
+      brave --refresh-platform-policy --no-startup-window >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+sync_alacritty_theme() {
+  ~/.local/bin/alacritty-theme-sync
+  ~/.local/bin/tmux-theme-sync
+}
+
+current_scheme="$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)"
+current_gtk="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null || true)"
+
+disable_brave_managed_theme
+
+if [[ "$current_scheme" == *"prefer-dark"* ]] || [[ "$current_gtk" == *"-dark'"* ]]; then
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-light'
+  gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+  sync_alacritty_theme
+  notify-send "System appearance" "Switched to light mode"
+else
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+  gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
+  sync_alacritty_theme
+  notify-send "System appearance" "Switched to dark mode"
+fi

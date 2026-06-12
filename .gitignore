@@ -6,3 +6,6 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated files
+tmux/.config/tmux/theme.conf
