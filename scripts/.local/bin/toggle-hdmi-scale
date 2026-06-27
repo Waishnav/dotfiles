@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Toggle BenQ external (HDMI-A-1) between 1x and 1.25x scale.
+# Default on boot remains 1x via monitors.conf; this only affects the live session.
+
+set -euo pipefail
+
+HDMI="HDMI-A-1"
+EDP="eDP-1"
+
+if ! hyprctl monitors -j | jq -e --arg n "$HDMI" '.[] | select(.name == $n)' >/dev/null 2>&1; then
+  notify-send "Display" "External monitor not connected" 2>/dev/null || true
+  exit 0
+fi
+
+scale=$(hyprctl monitors -j | jq -r --arg n "$HDMI" '.[] | select(.name == $n) | .scale')
+
+if awk -v s="$scale" 'BEGIN { exit !(s < 1.2) }'; then
+  hyprctl keyword monitor "$HDMI,2560x1440@100,0x0,1.25"
+  hyprctl keyword monitor "$EDP,1920x1080@120,64x1152,1"
+  notify-send "Display" "BenQ: 1.25× (distance mode)"
+else
+  hyprctl keyword monitor "$HDMI,2560x1440@100,0x0,1"
+  hyprctl keyword monitor "$EDP,1920x1080@120,320x1440,1"
+  notify-send "Display" "BenQ: 1×"
+fi
