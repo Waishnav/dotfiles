@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -u
+
+icon_dir="${HOME}/.local/share/outloud/icons/scalable/status"
+
+if state=$(timeout 0.15s "${HOME}/.local/bin/outloud" status 2>/dev/null); then
+  case "$state" in
+    idle)
+      icon="outloud-idle-symbolic.svg"
+      tooltip="Outloud — ready"
+      ;;
+    recording)
+      icon="outloud-recording-symbolic.svg"
+      tooltip="Outloud — recording"
+      ;;
+    processing)
+      frame=$(( ($(date +%s%N) / 200000000) % 4 ))
+      icon="outloud-processing-${frame}-symbolic.svg"
+      tooltip="Outloud — transcribing"
+      ;;
+    error)
+      icon="outloud-error-symbolic.svg"
+      tooltip="Outloud — error"
+      ;;
+    *)
+      icon="outloud-error-symbolic.svg"
+      tooltip="Outloud — unknown state"
+      ;;
+  esac
+else
+  icon="outloud-error-symbolic.svg"
+  tooltip="Outloud — service unavailable"
+fi
+
+printf '%s\n%s\n' "${icon_dir}/${icon}" "$tooltip"

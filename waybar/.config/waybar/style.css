@@ -26,6 +26,7 @@ window#waybar {
 /* ── Pill containers (vertical) ──────────────────────── */
 #launcher,
 #workspaces-pill,
+#outloud-pill,
 #center-pill,
 #utilities,
 #tray-expander,
@@ -98,6 +99,15 @@ window#waybar {
 
 #workspaces button:hover {
   background-color: alpha(@foreground, 0.12);
+}
+
+/* ── Outloud (always visible below workspaces) ───────── */
+#outloud-pill {
+  padding: 5px 2px;
+}
+
+#image.outloud {
+  padding: 2px 0;
 }
 
 /* ── Clock (stacked HH / MM) ────────────────────────── */

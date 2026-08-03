@@ -10,7 +10,8 @@
 
   "modules-left": [
     "group/launcher",
-    "group/workspaces-pill"
+    "group/workspaces-pill",
+    "group/outloud-pill"
   ],
   "modules-center": [
     "group/center-pill"
@@ -32,6 +33,10 @@
   "group/workspaces-pill": {
     "orientation": "inherit",
     "modules": ["hyprland/workspaces"]
+  },
+  "group/outloud-pill": {
+    "orientation": "inherit",
+    "modules": ["image#outloud"]
   },
   "group/center-pill": {
     "orientation": "inherit",
@@ -252,6 +257,13 @@
     "tooltip": true,
     "on-click-right": "omarchy-voxtype-config",
     "on-click": "omarchy-voxtype-model"
+  },
+  "image#outloud": {
+    "exec": "$HOME/.local/bin/outloud-waybar-icon",
+    "size": 18,
+    "interval": 0.2,
+    "tooltip": true,
+    "on-click": "$HOME/.local/bin/outloud toggle"
   },
   "tray": {
     "icon-size": 16,
