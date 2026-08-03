@@ -1,35 +1,62 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 icon_dir="${HOME}/.local/share/outloud/icons/scalable/status"
+cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/outloud/waybar-icons"
+theme_file="${HOME}/.config/omarchy/current/theme/waybar.css"
+
+foreground=$(awk '
+  $1 == "@define-color" && $2 == "foreground" {
+    gsub(/;/, "", $3)
+    print $3
+    exit
+  }
+' "$theme_file" 2>/dev/null || true)
+foreground=${foreground:-#dcd7ba}
 
 if state=$(timeout 0.15s "${HOME}/.local/bin/outloud" status 2>/dev/null); then
   case "$state" in
     idle)
-      icon="outloud-idle-symbolic.svg"
+      icon="outloud-idle-symbolic"
       tooltip="Outloud — ready"
       ;;
     recording)
-      icon="outloud-recording-symbolic.svg"
+      icon="outloud-recording-symbolic"
       tooltip="Outloud — recording"
       ;;
     processing)
       frame=$(( ($(date +%s%N) / 200000000) % 4 ))
-      icon="outloud-processing-${frame}-symbolic.svg"
+      icon="outloud-processing-${frame}-symbolic"
       tooltip="Outloud — transcribing"
       ;;
     error)
-      icon="outloud-error-symbolic.svg"
+      icon="outloud-error-symbolic"
       tooltip="Outloud — error"
       ;;
     *)
-      icon="outloud-error-symbolic.svg"
+      icon="outloud-error-symbolic"
       tooltip="Outloud — unknown state"
       ;;
   esac
 else
-  icon="outloud-error-symbolic.svg"
+  icon="outloud-error-symbolic"
   tooltip="Outloud — service unavailable"
 fi
 
-printf '%s\n%s\n' "${icon_dir}/${icon}" "$tooltip"
+source_icon="${icon_dir}/${icon}.svg"
+color_key=${foreground#\#}
+cached_icon="${cache_dir}/${icon}-${color_key}.png"
+
+# Waybar's image module cannot decode SVGs on this setup, so keep a
+# theme-colored raster cache for the small pinned status icon.
+if [[ ! -f "$cached_icon" || "$source_icon" -nt "$cached_icon" ]]; then
+  mkdir -p "$cache_dir"
+  temporary_icon="${cached_icon}.$$"
+  trap 'rm -f "$temporary_icon"' EXIT
+  sed "s/currentColor/${foreground}/g" "$source_icon" |
+    rsvg-convert --width 72 --height 72 --output "$temporary_icon" -
+  mv "$temporary_icon" "$cached_icon"
+  trap - EXIT
+fi
+
+printf '%s\n%s\n' "$cached_icon" "$tooltip"
