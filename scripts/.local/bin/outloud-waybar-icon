@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-icon_dir="${HOME}/.local/share/outloud/icons/scalable/status"
+status_icon_dir="${HOME}/.local/share/outloud/icons/scalable/status"
+waveform_icon_dir="${HOME}/.config/waybar/outloud-icons"
 cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/outloud/waybar-icons"
 theme_file="${HOME}/.config/omarchy/current/theme/waybar.css"
 
@@ -17,44 +18,59 @@ foreground=${foreground:-#dcd7ba}
 if state=$(timeout 0.15s "${HOME}/.local/bin/outloud" status 2>/dev/null); then
   case "$state" in
     idle)
-      icon="outloud-idle-symbolic"
+      source_icon="${waveform_icon_dir}/outloud-wave-idle.svg"
+      cache_key="outloud-wave-idle-fixed"
+      recolor=false
       tooltip="Outloud — ready"
       ;;
     recording)
-      icon="outloud-recording-symbolic"
+      frame=$(( ($(date +%s%N) / 200000000) % 6 ))
+      source_icon="${waveform_icon_dir}/outloud-wave-recording-${frame}.svg"
+      cache_key="outloud-wave-recording-${frame}-fixed"
+      recolor=false
       tooltip="Outloud — recording"
       ;;
     processing)
       frame=$(( ($(date +%s%N) / 200000000) % 4 ))
-      icon="outloud-processing-${frame}-symbolic"
+      source_icon="${status_icon_dir}/outloud-processing-${frame}-symbolic.svg"
+      cache_key="outloud-processing-${frame}-symbolic-${foreground#\#}"
+      recolor=true
       tooltip="Outloud — transcribing"
       ;;
     error)
-      icon="outloud-error-symbolic"
+      source_icon="${status_icon_dir}/outloud-error-symbolic.svg"
+      cache_key="outloud-error-symbolic-${foreground#\#}"
+      recolor=true
       tooltip="Outloud — error"
       ;;
     *)
-      icon="outloud-error-symbolic"
+      source_icon="${status_icon_dir}/outloud-error-symbolic.svg"
+      cache_key="outloud-error-symbolic-${foreground#\#}"
+      recolor=true
       tooltip="Outloud — unknown state"
       ;;
   esac
 else
-  icon="outloud-error-symbolic"
+  source_icon="${status_icon_dir}/outloud-error-symbolic.svg"
+  cache_key="outloud-error-symbolic-${foreground#\#}"
+  recolor=true
   tooltip="Outloud — service unavailable"
 fi
 
-source_icon="${icon_dir}/${icon}.svg"
-color_key=${foreground#\#}
-cached_icon="${cache_dir}/${icon}-${color_key}.png"
+cached_icon="${cache_dir}/${cache_key}.png"
 
 # Waybar's image module cannot decode SVGs on this setup, so keep a
-# theme-colored raster cache for the small pinned status icon.
+# raster cache for the small pinned status icon.
 if [[ ! -f "$cached_icon" || "$source_icon" -nt "$cached_icon" ]]; then
   mkdir -p "$cache_dir"
   temporary_icon="${cached_icon}.$$"
   trap 'rm -f "$temporary_icon"' EXIT
-  sed "s/currentColor/${foreground}/g" "$source_icon" |
-    rsvg-convert --width 72 --height 72 --output "$temporary_icon" -
+  if [[ "$recolor" == true ]]; then
+    sed "s/currentColor/${foreground}/g" "$source_icon" |
+      rsvg-convert --width 72 --height 72 --output "$temporary_icon" -
+  else
+    rsvg-convert --width 72 --height 72 --output "$temporary_icon" "$source_icon"
+  fi
   mv "$temporary_icon" "$cached_icon"
   trap - EXIT
 fi
