@@ -58,18 +58,15 @@ Or install specific modules:
 | Super+1 | WS 1 | WS 11 |
 | Super+2 | WS 2 | WS 12 |
 | Super+3 | WS 3 | WS 13 |
-| Super+4 | WS 4 | WS 14 |
-| Super+7 | WS 5 | WS 15 |
-| Super+8 | WS 6 | WS 16 |
-| Super+9 | WS 7 | WS 17 |
-| Super+0 | WS 8 | WS 18 |
+| Super+8 | WS 4 | WS 14 |
+| Super+9 | WS 5 | WS 15 |
+| Super+0 | WS 6 | WS 16 |
 
 ## Custom Scripts
 
 - `hypr-switch-workspace` - Switch synchronized workspace pairs
 - `hypr-move-to-workspace` - Move window (context-aware based on monitor)
 - `hypr-event-listener` - Handle monitor connect/disconnect events
-- `hypr-update-waybar` - Update waybar config for monitor changes
 - `hypr-gesture-workspace` - Handle touchpad gesture workspace switching
 - `tmux-sessionizer` - Fuzzy find and attach to project tmux sessions
 

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Locks the system using hyprlock.
+#
+# Why this differs from omarchy-lock-screen:
+# - hyprlock on this NVIDIA/AMD hybrid hangs during async GPU resource loading,
+#   spinning on CPU and never rendering. --immediate-render skips that wait and
+#   draws the lock screen right away.
+# - Stale/invisible hyprlock instances from a hang stack up and never lock;
+#   kill any existing one so re-locking is always fresh and idempotent.
+# - The keyboard layout must be reset BEFORE hyprlock grabs the keyboard,
+#   otherwise the lock screen can keep the pre-lock layout (keymap race).
+# - disown keeps this script from hanging around as hyprlock's parent.
+
+# Reset keyboard layout to default (first layout) BEFORE locking.
+hyprctl switchxkblayout all 0 > /dev/null 2>&1
+
+# Replace any stuck hyprlock, then start a fresh one detached from this shell.
+pkill -x hyprlock 2>/dev/null
+sleep 0.2
+
+hyprlock --immediate-render &
+disown
+
+# Ensure 1password is locked.
+if pgrep -x "1password" >/dev/null; then
+  1password --lock &
+fi
+
+# Close the Omarchy screensaver windows without matching unrelated processes.
+hyprctl clients -j 2>/dev/null |
+    jq -r '.[] | select(.class == "org.omarchy.screensaver") | .address' |
+    while read -r address; do
+        [[ -n "$address" ]] && hyprctl dispatch closewindow "address:$address" >/dev/null 2>&1
+    done
