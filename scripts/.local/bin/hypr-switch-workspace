@@ -1,8 +1,14 @@
 #!/bin/bash
 # Switch synchronized workspace pair without moving cursor
-# Usage: hypr-switch-workspace <workspace_number 1-8>
+# Usage: hypr-switch-workspace <workspace_number 1-6>
+# Laptop: WS N, External: WS N+10
 
-WS=$1
+WS=${1:-}
+if ! [[ "$WS" =~ ^[1-6]$ ]]; then
+    echo "Usage: $0 <workspace 1-6>" >&2
+    exit 2
+fi
+
 EXTERNAL_WS=$((WS + 10))
 
 # Save current cursor position

@@ -1,26 +1,41 @@
 #!/bin/bash
 # Handle gesture-based workspace switching with synchronized monitors
 # Usage: hypr-gesture-workspace next|prev
+# Logical slots: 1-6 (laptop WS 1-6, external WS 11-16)
 
-DIRECTION=$1
+DIRECTION=${1:-}
+MAX_WS=6
+
+if [[ "$DIRECTION" != "next" && "$DIRECTION" != "prev" ]]; then
+    echo "Usage: $0 {next|prev}" >&2
+    exit 2
+fi
 
 # Get current workspace on the focused monitor
 current=$(hyprctl activeworkspace -j | jq -r '.id')
+if ! [[ "$current" =~ ^[0-9]+$ ]]; then
+    echo "Unable to determine the active workspace" >&2
+    exit 1
+fi
 
-# Determine if we're on laptop (1-8) or external (11-18)
+# Determine logical slot: laptop (1-6) or external (11-16)
 if [[ $current -ge 11 ]]; then
     base=$((current - 10))
 else
     base=$current
 fi
 
-# Calculate new workspace
+# Clamp orphaned workspaces (e.g. leftover 7/8/17/18) into range
+[[ $base -gt $MAX_WS ]] && base=$MAX_WS
+[[ $base -lt 1 ]] && base=1
+
+# Calculate new workspace, wrapping within 1-6
 if [[ "$DIRECTION" == "next" ]]; then
     new_base=$((base + 1))
-    [[ $new_base -gt 8 ]] && new_base=1
+    [[ $new_base -gt $MAX_WS ]] && new_base=1
 else
     new_base=$((base - 1))
-    [[ $new_base -lt 1 ]] && new_base=8
+    [[ $new_base -lt 1 ]] && new_base=$MAX_WS
 fi
 
 # Use existing switch script

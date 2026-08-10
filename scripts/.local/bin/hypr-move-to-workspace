@@ -1,10 +1,16 @@
 #!/bin/bash
-# Move active window to workspace N on the current monitor
-# Usage: hypr-move-to-workspace <workspace_number 1-8>
-# If on laptop (eDP-1): moves to WS 1-8
-# If on external (HDMI-A-1): moves to WS 11-18
+# Silently move active window to workspace N on the current monitor.
+# Does NOT switch workspaces / follow the window — stays where you are.
+# Usage: hypr-move-to-workspace <workspace_number 1-6>
+# If on laptop (eDP-1): moves to WS 1-6
+# If on external (HDMI-A-1): moves to WS 11-16
 
-ws_num=$1
+ws_num=${1:-}
+if ! [[ "$ws_num" =~ ^[1-6]$ ]]; then
+    echo "Usage: $0 <workspace 1-6>" >&2
+    exit 2
+fi
+
 current_monitor=$(hyprctl activeworkspace -j | jq -r '.monitor')
 
 if [[ "$current_monitor" == "HDMI-A-1" ]]; then
@@ -13,4 +19,4 @@ else
     target_ws=$ws_num
 fi
 
-hyprctl dispatch movetoworkspace "$target_ws"
+hyprctl dispatch movetoworkspacesilent "$target_ws"

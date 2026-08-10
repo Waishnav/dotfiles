@@ -1,40 +1,80 @@
 #!/bin/bash
-# Reconcile the external monitor without treating a transient HDMI flap as a
-# real unplug. Windows move only after a stable, awake disconnect.
+# Reconcile the external monitor without treating idle/wake link training as a
+# real unplug. Window migration only follows a stable, awake disconnect.
 
 set -o pipefail
 
-EXTERNAL_MONITOR="HDMI-A-1"
-LAPTOP_MONITOR="eDP-1"
-LOG_FILE="/tmp/hypr-event-listener.log"
+EXTERNAL_MONITOR="${EXTERNAL_MONITOR:-HDMI-A-1}"
+LAPTOP_MONITOR="${LAPTOP_MONITOR:-eDP-1}"
+LOG_FILE="${LOG_FILE:-/tmp/hypr-event-listener.log}"
+LAYOUT_FILE="${HYPR_EXTERNAL_LAYOUT_FILE:-/tmp/hypr-external-layout.json}"
 
-REMOVE_DEBOUNCE=6
-ADD_DEBOUNCE=3
-PROBE_INTERVAL=5
-RECOVERY_COOLDOWN=20
+REMOVE_DEBOUNCE="${REMOVE_DEBOUNCE:-6}"
+ADD_DEBOUNCE="${ADD_DEBOUNCE:-3}"
+PROBE_INTERVAL="${PROBE_INTERVAL:-5}"
+WAKE_GRACE="${WAKE_GRACE:-15}"
+CONNECTED_WAKE_GRACE="${CONNECTED_WAKE_GRACE:-30}"
+RECOVERY_COOLDOWN="${RECOVERY_COOLDOWN:-20}"
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is required}"
-FIFO="$RUNTIME_DIR/hypr-event-listener.fifo"
-LOCK_FILE="$RUNTIME_DIR/hypr-event-listener.lock"
+LAPTOP_WORKSPACES=(1 2 3 4 5 6)
+EXTERNAL_WORKSPACES=(11 12 13 14 15 16)
 
-if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
-    SOCKET="$RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
-else
-    SOCKET="$RUNTIME_DIR/hypr/$(find "$RUNTIME_DIR/hypr" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | head -1)/.socket2.sock"
-fi
-
-# present: monitor is available; dormant: monitor disappeared while all
-# outputs were DPMS-off; absent: monitor is genuinely unavailable while awake.
-STATE="unknown"
+# present: HDMI is active
+# dormant: HDMI disappeared while every known output was DPMS-off
+# wake-grace: the laptop woke and HDMI is allowed time to train
+# absent: HDMI is genuinely unavailable while awake
+STATE="${STATE:-unknown}"
+WAKE_GRACE_STARTED_AT=0
 LAST_RECOVERY=0
+LAYOUT_READY=0
+MONITORS_JSON=""
 
 log() {
     printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$1" >> "$LOG_FILE"
 }
 
-external_present() {
-    hyprctl monitors -j 2>/dev/null |
-        jq -e --arg monitor "$EXTERNAL_MONITOR" 'any(.[]; .name == $monitor)' >/dev/null 2>&1
+now_seconds() {
+    date +%s
+}
+
+read_monitor_snapshot() {
+    local snapshot
+    if ! snapshot=$(hyprctl monitors -j 2>/dev/null); then
+        return 1
+    fi
+    if ! jq -e 'type == "array"' <<< "$snapshot" >/dev/null 2>&1; then
+        return 1
+    fi
+    MONITORS_JSON="$snapshot"
+}
+
+external_state_from_snapshot() {
+    if jq -e --arg monitor "$EXTERNAL_MONITOR" \
+        'any(.[]; .name == $monitor)' <<< "$MONITORS_JSON" >/dev/null 2>&1; then
+        printf 'present\n'
+    else
+        printf 'absent\n'
+    fi
+}
+
+power_state_from_snapshot() {
+    if jq -e 'length > 0 and all(.[]; .dpmsStatus == false)' \
+        <<< "$MONITORS_JSON" >/dev/null 2>&1; then
+        printf 'dormant\n'
+    elif jq -e 'length > 0 and any(.[]; .dpmsStatus == true)' \
+        <<< "$MONITORS_JSON" >/dev/null 2>&1; then
+        printf 'awake\n'
+    else
+        printf 'unknown\n'
+    fi
+}
+
+external_monitor_state() {
+    if ! read_monitor_snapshot; then
+        printf 'unknown\n'
+        return
+    fi
+    external_state_from_snapshot
 }
 
 connector_connected() {
@@ -47,251 +87,422 @@ connector_connected() {
     return 1
 }
 
-system_dormant() {
-    # Hyprland reports dpmsStatus as a boolean for each currently-known output.
-    hyprctl monitors -j 2>/dev/null |
-        jq -e 'length > 0 and all(.[]; .dpmsStatus == false)' >/dev/null 2>&1
-}
+# Return 0 when the requested state remains stable, 1 when it changes, and 2
+# when Hyprland cannot provide a trustworthy reading.
+wait_for_external_state() {
+    local expected="$1"
+    local duration="$2"
+    local current
+    local second
 
-monitor_present_stably() {
-    local i
-    for ((i = 1; i <= ADD_DEBOUNCE; i++)); do
-        external_present || return 1
+    for ((second = 0; second < duration; second++)); do
+        current=$(external_monitor_state)
+        [[ "$current" == "unknown" ]] && return 2
+        [[ "$current" == "$expected" ]] || return 1
         sleep 1
     done
-    return 0
+
+    current=$(external_monitor_state)
+    [[ "$current" == "unknown" ]] && return 2
+    [[ "$current" == "$expected" ]]
 }
 
-monitor_absent_stably() {
-    local i
-    for ((i = 1; i <= REMOVE_DEBOUNCE; i++)); do
-        external_present && return 1
-        sleep 1
-    done
-    ! external_present
+save_external_layout() {
+    HYPR_EXTERNAL_LAYOUT_FILE="$LAYOUT_FILE" \
+        ~/.local/bin/hypr-save-layout >> "$LOG_FILE" 2>&1
 }
 
 migrate_windows_to_laptop() {
-    log "Migrating windows from external to laptop..."
-    for ws in 11 12 13 14 15 16; do
-        local laptop_ws=$((ws - 10))
-        local windows
-        windows=$(hyprctl clients -j 2>/dev/null | jq -r ".[] | select(.workspace.id == $ws) | .address")
+    local clients
+    local failed=0
+    local laptop_ws
+    local windows
+    local address
+    local ws
+
+    if ! clients=$(hyprctl clients -j 2>/dev/null) ||
+        ! jq -e 'type == "array"' <<< "$clients" >/dev/null 2>&1; then
+        log "Cannot read Hyprland clients; postponing window migration"
+        return 1
+    fi
+
+    log "Migrating windows from external workspaces..."
+    for ws in "${EXTERNAL_WORKSPACES[@]}"; do
+        laptop_ws=$((ws - 10))
+        windows=$(jq -r --argjson workspace "$ws" \
+            '.[] | select(.workspace.id == $workspace) | .address' <<< "$clients")
         for address in $windows; do
-            if [[ -n "$address" ]]; then
-                log "  Moving window $address from WS $ws to WS $laptop_ws"
-                hyprctl dispatch movetoworkspacesilent "$laptop_ws,address:$address" >/dev/null 2>&1 ||
-                    log "  Failed to move window $address"
+            if ! hyprctl dispatch movetoworkspacesilent \
+                "$laptop_ws,address:$address" >/dev/null 2>&1; then
+                log "Failed to move window $address from WS $ws"
+                failed=1
             fi
         done
     done
 
-    # Real unplug only: allow Hyprland to remove unused external workspaces.
-    for ws in 11 12 13 14 15 16; do
-        hyprctl keyword workspace "$ws,persistent:false" >/dev/null 2>&1 ||
-            log "  Failed to disable persistence for WS $ws"
+    for ws in "${EXTERNAL_WORKSPACES[@]}"; do
+        if ! hyprctl keyword workspace "$ws,persistent:false" >/dev/null 2>&1; then
+            log "Failed to disable persistence for WS $ws"
+            failed=1
+        fi
     done
-    log "Migration complete"
+
+    ((failed == 0))
 }
 
-sync_to_current_workspace() {
-    local current_ws external_ws
+enable_external_workspaces() {
+    local failed=0
+    local ws
 
-    for ws in 11 12 13 14 15 16; do
-        hyprctl keyword workspace "$ws,monitor:$EXTERNAL_MONITOR,persistent:true" >/dev/null 2>&1 ||
-            log "  Failed to restore persistence for WS $ws"
+    for ws in "${EXTERNAL_WORKSPACES[@]}"; do
+        if ! hyprctl keyword workspace \
+            "$ws,monitor:$EXTERNAL_MONITOR,persistent:true" >/dev/null 2>&1; then
+            log "Failed to restore persistence for WS $ws"
+            failed=1
+        fi
     done
 
-    current_ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id')
-    if [[ "$current_ws" =~ ^[0-9]+$ ]] && ((current_ws >= 1 && current_ws <= 6)); then
-        external_ws=$((current_ws + 10))
-        hyprctl dispatch focusmonitor "$EXTERNAL_MONITOR" >/dev/null 2>&1 || return 1
-        hyprctl dispatch workspace "$external_ws" >/dev/null 2>&1 || return 1
-        hyprctl dispatch focusmonitor "$LAPTOP_MONITOR" >/dev/null 2>&1 || return 1
+    ((failed == 0))
+}
+
+sync_external_to_laptop_workspace() {
+    local laptop_ws
+    local external_ws
+
+    if ! laptop_ws=$(hyprctl monitors -j 2>/dev/null |
+        jq -er --arg monitor "$LAPTOP_MONITOR" \
+            '.[] | select(.name == $monitor) | .activeWorkspace.id'); then
+        log "Cannot determine the laptop workspace"
+        return 1
     fi
+
+    if ! [[ "$laptop_ws" =~ ^[0-9]+$ ]] ||
+        ((laptop_ws < 1 || laptop_ws > ${#LAPTOP_WORKSPACES[@]})); then
+        log "Laptop workspace $laptop_ws is outside the synchronized range"
+        return 1
+    fi
+
+    external_ws=$((laptop_ws + 10))
+    if ! hyprctl dispatch focusmonitor "$EXTERNAL_MONITOR" >/dev/null 2>&1; then
+        return 1
+    fi
+    if ! hyprctl dispatch workspace "$external_ws" >/dev/null 2>&1; then
+        hyprctl dispatch focusmonitor "$LAPTOP_MONITOR" >/dev/null 2>&1 || true
+        return 1
+    fi
+    hyprctl dispatch focusmonitor "$LAPTOP_MONITOR" >/dev/null 2>&1
 }
 
 restore_external_layout() {
-    if [[ -s /tmp/hypr-external-layout.json ]]; then
-        ~/.local/bin/hypr-restore-layout >> "$LOG_FILE" 2>&1 ||
-            log "Window layout restoration reported an error"
-    fi
+    ((LAYOUT_READY == 1)) || return 0
+    [[ -s "$LAYOUT_FILE" ]] || return 0
+    HYPR_EXTERNAL_LAYOUT_FILE="$LAYOUT_FILE" \
+        ~/.local/bin/hypr-restore-layout >> "$LOG_FILE" 2>&1
+}
+
+restore_external_configuration() {
+    enable_external_workspaces &&
+        sync_external_to_laptop_workspace &&
+        restore_external_layout
 }
 
 transition_to_dormant() {
     [[ "$STATE" == "absent" || "$STATE" == "dormant" ]] && return 0
     STATE="dormant"
+    WAKE_GRACE_STARTED_AT=0
     log "HDMI disappeared while DPMS was off; holding external workspaces"
+}
+
+begin_wake_grace() {
+    [[ "$STATE" == "wake-grace" ]] && return 0
+    STATE="wake-grace"
+    WAKE_GRACE_STARTED_AT=$(now_seconds)
+    log "Laptop woke before HDMI; waiting for link training"
 }
 
 transition_to_absent() {
     [[ "$STATE" == "absent" ]] && return 0
 
-    STATE="absent"
-    log "External monitor absent while awake; saving and migrating layout"
-    if ~/.local/bin/hypr-save-layout >> "$LOG_FILE" 2>&1; then
-        log "Layout saved"
-    else
-        log "Layout save failed; continuing with window migration"
+    # Keep a successful snapshot across migration retries. Re-saving after a
+    # partial migration would lose the windows that already moved.
+    if ((LAYOUT_READY == 0)); then
+        if save_external_layout; then
+            LAYOUT_READY=1
+            log "External layout saved"
+        else
+            log "Layout save failed; migration will continue without automatic restoration"
+        fi
     fi
-    migrate_windows_to_laptop
+
+    if ! migrate_windows_to_laptop; then
+        log "Window migration failed; keeping state for retry"
+        return 1
+    fi
+
+    STATE="absent"
+    WAKE_GRACE_STARTED_AT=0
+    log "External monitor confirmed absent"
 }
 
 transition_to_present() {
     case "$STATE" in
         absent)
             log "External monitor stable; restoring workspace layout"
-            if ! sync_to_current_workspace; then
-                log "Workspace restoration failed; will retry on the next probe"
+            if ! restore_external_configuration; then
+                log "Workspace restoration failed; retaining absent state for retry"
                 return 1
             fi
-            restore_external_layout
             STATE="present"
-            log "External monitor restored without Waybar reload"
+            LAYOUT_READY=0
+            log "External monitor restored"
             ;;
-        dormant)
+        dormant | wake-grace)
             STATE="present"
-            log "External monitor returned from dormant state; no window migration to undo"
+            WAKE_GRACE_STARTED_AT=0
+            log "HDMI returned during wake; no window migration was needed"
             ;;
         unknown)
             STATE="present"
             log "External monitor present at initialization"
             ;;
-        present)
+        present) ;;
+    esac
+}
+
+request_monitor_reload() {
+    local now
+    now=$(now_seconds)
+
+    ((now - LAST_RECOVERY >= RECOVERY_COOLDOWN)) || return 0
+    log "DRM reports HDMI connected but inactive; reloading monitor configuration"
+    if hyprctl reload >> "$LOG_FILE" 2>&1; then
+        LAST_RECOVERY=$now
+    else
+        log "Hyprland monitor reload failed"
+        return 1
+    fi
+}
+
+handle_confirmed_absence() {
+    local power_state
+
+    if ! read_monitor_snapshot; then
+        log "Monitor query failed after debounce; preserving state=$STATE"
+        return 1
+    fi
+    if [[ "$(external_state_from_snapshot)" == "present" ]]; then
+        transition_to_present
+        return
+    fi
+
+    power_state=$(power_state_from_snapshot)
+    case "$power_state" in
+        dormant)
+            transition_to_dormant
+            ;;
+        awake)
+            case "$STATE" in
+                dormant)
+                    begin_wake_grace
+                    ;;
+                wake-grace)
+                    handle_wake_grace
+                    ;;
+                present | unknown)
+                    transition_to_absent
+                    ;;
+                absent) ;;
+            esac
+            ;;
+        unknown)
+            log "DPMS state is unknown; preserving state=$STATE"
             ;;
     esac
 }
 
-reconcile_state() {
-    if external_present; then
-        if [[ "$STATE" == "absent" ]] && monitor_present_stably; then
-            transition_to_present
-        elif [[ "$STATE" == "dormant" ]]; then
-            transition_to_present
-        elif [[ "$STATE" == "unknown" ]]; then
-            transition_to_present
-        fi
+handle_wake_grace() {
+    local elapsed
+    local grace_limit="$WAKE_GRACE"
+
+    ((WAKE_GRACE_STARTED_AT > 0)) || WAKE_GRACE_STARTED_AT=$(now_seconds)
+    elapsed=$(($(now_seconds) - WAKE_GRACE_STARTED_AT))
+
+    if connector_connected; then
+        grace_limit="$CONNECTED_WAKE_GRACE"
+        request_monitor_reload || true
+    fi
+
+    if ((elapsed < grace_limit)); then
         return 0
     fi
 
-    if system_dormant; then
-        transition_to_dormant
-        return 0
-    fi
-
-    # This is the important dormant -> absent transition: the user woke the
-    # laptop, but the external monitor never came back.
-    if [[ "$STATE" == "dormant" ]]; then
-        transition_to_absent
-        return 0
-    fi
-
-    if [[ "$STATE" == "unknown" || "$STATE" == "present" ]] && monitor_absent_stably; then
-        if system_dormant; then
-            transition_to_dormant
-        else
-            transition_to_absent
-        fi
-    fi
+    log "HDMI remained absent for ${elapsed}s after wake"
+    transition_to_absent
 }
 
-probe_connector() {
-    local now
-    now=$(date +%s)
+reconcile_present_monitor() {
+    case "$STATE" in
+        absent)
+            local wait_result
+            wait_for_external_state present "$ADD_DEBOUNCE"
+            wait_result=$?
+            case "$wait_result" in
+                0) transition_to_present ;;
+                1) log "HDMI presence was transient; retaining absent state" ;;
+                2) log "Monitor query failed during add debounce; retaining absent state" ;;
+            esac
+            ;;
+        dormant | wake-grace | unknown)
+            transition_to_present
+            ;;
+        present) ;;
+    esac
+}
 
-    # DRM can know that a physical connector is connected before Hyprland has
-    # recreated its monitor object. Reload the normal monitor configuration;
-    # output create is for virtual outputs and cannot fix this case.
-    if ! external_present && connector_connected && ((now - LAST_RECOVERY >= RECOVERY_COOLDOWN)); then
-        log "DRM reports HDMI connected but Hyprland has no HDMI output; requesting config reload"
-        if hyprctl reload >> "$LOG_FILE" 2>&1; then
-            LAST_RECOVERY=$now
-        else
-            log "Hyprland config reload failed"
-        fi
+reconcile_state() {
+    local external_state
+    local power_state
+    local wait_result
+
+    if ! read_monitor_snapshot; then
+        log "Monitor query failed; preserving state=$STATE"
+        return 1
     fi
 
-    reconcile_state
+    external_state=$(external_state_from_snapshot)
+    if [[ "$external_state" == "present" ]]; then
+        reconcile_present_monitor
+        return
+    fi
+
+    power_state=$(power_state_from_snapshot)
+    if [[ "$power_state" == "dormant" ]]; then
+        transition_to_dormant
+        return
+    fi
+    if [[ "$power_state" == "unknown" ]]; then
+        log "DPMS state is unknown; preserving state=$STATE"
+        return 1
+    fi
+
+    case "$STATE" in
+        dormant)
+            begin_wake_grace
+            ;;
+        wake-grace)
+            handle_wake_grace
+            ;;
+        absent)
+            connector_connected && request_monitor_reload
+            ;;
+        present | unknown)
+            wait_for_external_state absent "$REMOVE_DEBOUNCE"
+            wait_result=$?
+            case "$wait_result" in
+                0) handle_confirmed_absence ;;
+                1) log "HDMI recovered during remove debounce; ignoring flap" ;;
+                2) log "Monitor query failed during remove debounce; preserving state=$STATE" ;;
+            esac
+            ;;
+    esac
 }
 
 handle_event() {
+    local wait_result
+
     case "$1" in
         "monitorremoved>>$EXTERNAL_MONITOR")
-            log "Monitor removed: $EXTERNAL_MONITOR (waiting for stable state)"
-            if monitor_absent_stably; then
-                reconcile_state
-            else
-                log "HDMI flap recovered within ${REMOVE_DEBOUNCE}s; ignoring"
-            fi
+            [[ "$STATE" == "absent" ]] && return 0
+            log "Monitor removed: $EXTERNAL_MONITOR"
+            wait_for_external_state absent "$REMOVE_DEBOUNCE"
+            wait_result=$?
+            case "$wait_result" in
+                0) handle_confirmed_absence ;;
+                1) log "HDMI recovered during remove debounce; ignoring flap" ;;
+                2) log "Monitor query failed during remove debounce; preserving state=$STATE" ;;
+            esac
             ;;
         "monitoradded>>$EXTERNAL_MONITOR")
-            log "Monitor added: $EXTERNAL_MONITOR (waiting for stable state)"
-            if monitor_present_stably; then
-                transition_to_present
-            else
-                log "HDMI add was transient; ignoring"
-            fi
+            log "Monitor added: $EXTERNAL_MONITOR"
+            wait_for_external_state present "$ADD_DEBOUNCE"
+            wait_result=$?
+            case "$wait_result" in
+                0) transition_to_present ;;
+                1) log "HDMI add was transient; ignoring" ;;
+                2) log "Monitor query failed during add debounce; preserving state=$STATE" ;;
+            esac
             ;;
     esac
 }
 
 cleanup() {
-    kill "$SOCKET_LOOP_PID" "$PROBE_PID" 2>/dev/null || true
-    rm -f "$FIFO"
+    trap - EXIT INT TERM
+    [[ -n "${SOCKET_PID:-}" ]] && kill "$SOCKET_PID" 2>/dev/null || true
+    [[ -n "${SOCKET_PID:-}" ]] && wait "$SOCKET_PID" 2>/dev/null || true
 }
 
-# Do not allow a second listener to delete the first listener's FIFO.
-exec 9> "$LOCK_FILE"
-if ! flock -n 9; then
-    exit 0
-fi
+resolve_socket() {
+    local signature="${HYPRLAND_INSTANCE_SIGNATURE:-}"
 
-echo "=== hypr-event-listener started $(date) ===" > "$LOG_FILE"
-log "Listening for monitor events..."
+    if [[ -z "$signature" ]]; then
+        signature=$(find "$RUNTIME_DIR/hypr" -mindepth 1 -maxdepth 1 -type d \
+            -printf '%f\n' 2>/dev/null | head -1)
+    fi
+    [[ -n "$signature" ]] || return 1
+    SOCKET="$RUNTIME_DIR/hypr/$signature/.socket2.sock"
+}
 
-rm -f "$FIFO"
-if ! mkfifo "$FIFO"; then
-    log "FATAL: cannot create event FIFO $FIFO"
-    exit 1
-fi
+event_loop() {
+    local event_fd
+    local line
+    local read_result
 
-# Keep reconnecting if the Hyprland socket disappears. The FIFO preserves a
-# single serialized stream for socket events and probe ticks.
-(
     while true; do
-        socat -U - UNIX-CONNECT:"$SOCKET" 2>> "$LOG_FILE" || true
+        exec {event_fd}< <(exec socat -U - UNIX-CONNECT:"$SOCKET" 2>> "$LOG_FILE")
+        SOCKET_PID=$!
+
+        while true; do
+            if IFS= read -r -t "$PROBE_INTERVAL" -u "$event_fd" line; then
+                [[ -n "$line" ]] && handle_event "$line"
+                continue
+            fi
+
+            read_result=$?
+            if ((read_result > 128)); then
+                reconcile_state || true
+                continue
+            fi
+            break
+        done
+
+        exec {event_fd}<&-
+        wait "$SOCKET_PID" 2>/dev/null || true
+        SOCKET_PID=""
         sleep 1
     done
-) > "$FIFO" &
-SOCKET_LOOP_PID=$!
+}
 
-(
-    while true; do
-        sleep "$PROBE_INTERVAL"
-        printf '__PROBE__\n' > "$FIFO"
-    done
-) &
-PROBE_PID=$!
+main() {
+    RUNTIME_DIR="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is required}"
+    LOCK_FILE="$RUNTIME_DIR/hypr-event-listener.lock"
+    resolve_socket || {
+        printf 'Cannot locate the Hyprland event socket\n' >&2
+        return 1
+    }
 
-trap cleanup EXIT INT TERM
+    exec 9> "$LOCK_FILE"
+    flock -n 9 || return 0
 
-exec 3< "$FIFO"
+    echo "=== hypr-event-listener started $(date) ===" > "$LOG_FILE"
+    log "Listening for monitor events..."
 
-# Reconcile the state in case the listener started after a monitor event.
-if external_present; then
-    STATE="present"
-elif system_dormant; then
-    STATE="dormant"
-    log "Starting dormant with HDMI absent; holding external workspaces"
-else
-    reconcile_state
+    trap cleanup EXIT
+    trap 'exit 0' INT TERM
+
+    reconcile_state || true
+    event_loop
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
 fi
-
-while IFS= read -r line <&3; do
-    [[ -n "$line" ]] || continue
-    if [[ "$line" == "__PROBE__" ]]; then
-        probe_connector
-    else
-        handle_event "$line"
-    fi
-done
