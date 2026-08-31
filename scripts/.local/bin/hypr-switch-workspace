@@ -11,23 +11,43 @@ fi
 
 EXTERNAL_WS=$((WS + 10))
 
-# Save current cursor position
+# Save current cursor position and the monitor under it
 cursor_pos=$(hyprctl cursorpos -j)
 cursor_x=$(echo "$cursor_pos" | jq -r '.x')
 cursor_y=$(echo "$cursor_pos" | jq -r '.y')
 
-# Check if external monitor exists
-has_external=$(hyprctl monitors -j | jq -r '.[] | select(.name == "HDMI-A-1") | .name')
+monitors_json=$(hyprctl monitors -j)
+# Monitor under cursor (geometry check) - what the user is hovering
+cursor_monitor=$(echo "$monitors_json" | jq -r --argjson x "$cursor_x" --argjson y "$cursor_y" \
+  '.[] | select(.x <= $x and $x < .x + .width and .y <= $y and $y < .y + .height) | .name' | head -1)
+# Fallback to focused monitor if cursor lookup fails
+if [[ -z "$cursor_monitor" ]]; then
+    cursor_monitor=$(echo "$monitors_json" | jq -r '.[] | select(.focused == true) | .name')
+fi
+
+has_external=$(echo "$monitors_json" | jq -r '.[] | select(.name == "HDMI-A-1") | .name')
 
 if [[ -n "$has_external" ]]; then
-    # Dual monitor: switch both workspaces
-    # Separate calls (not batch) so focus state updates between them
-    hyprctl dispatch workspace "$WS"
-    hyprctl dispatch workspace "$EXTERNAL_WS"
+    # Dual monitor: switch both workspaces.
+    # Order dispatches so final focused monitor == cursor_monitor.
+    # Otherwise `workspace` always steals focus to its bound monitor and
+    # movecursor (no_warps + 0-delta) won't trigger follow_mouse.
+    if [[ "$cursor_monitor" == "eDP-1" ]]; then
+        hyprctl dispatch workspace "$EXTERNAL_WS"
+        hyprctl dispatch workspace "$WS"
+    else
+        hyprctl dispatch workspace "$WS"
+        hyprctl dispatch workspace "$EXTERNAL_WS"
+    fi
 else
     # Laptop only: just switch the workspace
     hyprctl dispatch workspace "$WS"
 fi
 
-# Restore cursor position
+# Restore cursor position (keeps no_warps illusion) and explicitly
+# restore focus to the hovered monitor. This is the actual fix:
+# without it focus always ended on HDMI-A-1 (last dispatch).
 hyprctl dispatch movecursor "$cursor_x" "$cursor_y"
+if [[ -n "$has_external" && -n "$cursor_monitor" ]]; then
+    hyprctl dispatch focusmonitor "$cursor_monitor"
+fi
