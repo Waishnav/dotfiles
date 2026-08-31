@@ -6,7 +6,7 @@
 set -e
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODULES=(hypr waybar alacritty tmux nvim scripts zsh libinput-gestures)
+MODULES=(hypr waybar alacritty tmux nvim scripts zsh fish libinput-gestures)
 
 # Colors
 RED='\033[0;31m'

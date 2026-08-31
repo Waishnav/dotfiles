@@ -147,6 +147,30 @@ alias ccgp='ANTHROPIC_AUTH_TOKEN="test" \
   ENABLE_EXPERIMENTAL_MCP_CLI="true" \
   claude'
 
+# Claude Code harness → CLIProxyAPI (Codex + Grok Build in one model picker)
+# Start proxy: systemctl --user enable --now cli-proxy-api
+# Auth (once each): claudex-codex-login | claudex-xai-login
+#
+# Default: gpt-5.6-sol. Switch in-session via /model — both Codex and Grok IDs are listed.
+# Shortcuts still accept --model overrides, e.g. claudex --model grok-4.5
+# Sol: 272k catalog, ~258.4k effective (95%). Compact via terra; see ~/.config/claude/claudex-settings.json
+alias grok-minimal='grok --agent minimal'
+alias claudex='claude \
+  --settings "$HOME/.config/claude/claudex-settings.json" \
+  --model gpt-5.6-sol \
+  --dangerously-skip-permissions'
+
+# Convenience model presets (same unified settings / provider pool)
+alias claudexg='claude \
+  --settings "$HOME/.config/claude/claudex-settings.json" \
+  --model grok-4.5 \
+  --dangerously-skip-permissions'
+
+alias claudexgc='claude \
+  --settings "$HOME/.config/claude/claudex-settings.json" \
+  --model grok-composer-2.5-fast \
+  --dangerously-skip-permissions'
+
 # --- Custom Functions ---
 ask() {
   if [ -t 0 ]; then
@@ -173,6 +197,11 @@ export OPENCODE_EXPERIMENTAL_MARKDOWN=1
 
 # Added by Antigravity CLI installer
 export PATH="/home/waishnav/.local/bin:$PATH"
+
+
+
+# Vite+ bin (https://viteplus.dev)
+. "$HOME/.vite-plus/env"
 
 # >>> grok installer >>>
 export PATH="$HOME/.grok/bin:$PATH"
