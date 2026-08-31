@@ -1,6 +1,8 @@
 #!/bin/bash
-# Restore windows to their original external workspaces from saved layout
-# Matches windows by class+title, moves them back, and restores floating geometry
+# Restore surviving windows to their original external workspaces.
+# A Hyprland address plus PID identifies the same live client across workspace
+# moves. Class/title are diagnostic only: guessing by them can move an unrelated
+# browser window after a title change.
 
 set -o pipefail
 
@@ -20,13 +22,22 @@ if [[ "$saved_count" -eq 0 ]]; then
     exit 0
 fi
 
+if ! clients=$(hyprctl clients -j 2>/dev/null) ||
+    ! jq -e 'type == "array"' <<< "$clients" >/dev/null 2>&1; then
+    echo "Unable to read clients while restoring the external layout" >&2
+    exit 1
+fi
+
 restored=0
+skipped=0
 failed=0
 
 # Iterate over each saved window entry
 while read -r entry; do
     saved_class=$(echo "$entry" | jq -r '.class')
     saved_title=$(echo "$entry" | jq -r '.title')
+    saved_address=$(echo "$entry" | jq -r '.address // empty')
+    saved_pid=$(echo "$entry" | jq -r '.pid // empty')
     saved_ws=$(echo "$entry" | jq -r '.workspace')
     saved_floating=$(echo "$entry" | jq -r '.floating')
     saved_x=$(echo "$entry" | jq -r '.x')
@@ -34,57 +45,32 @@ while read -r entry; do
     saved_w=$(echo "$entry" | jq -r '.w')
     saved_h=$(echo "$entry" | jq -r '.h')
 
-    # The window was on external WS 11-16, and got migrated to laptop WS 1-6
-    laptop_ws=$((saved_ws - 10))
-    already_restored=0
-
-    if ! clients=$(hyprctl clients -j 2>/dev/null) ||
-        ! jq -e 'type == "array"' <<< "$clients" >/dev/null 2>&1; then
-        echo "  Unable to read clients while restoring $saved_class" >&2
-        failed=$((failed + 1))
+    # Legacy snapshots intentionally do not fall back to class/title matching.
+    # Skipping is safer than moving a different window that happens to share an
+    # application class.
+    if [[ -z "$saved_address" || -z "$saved_pid" ]]; then
+        echo "  Skipped legacy entry without exact identity: $saved_class ($saved_title)"
+        skipped=$((skipped + 1))
         continue
     fi
 
-    # Find the matching window currently on the laptop workspace
-    # Match by class first, then narrow by title if multiple matches
     match_addr=$(jq -r \
-        --arg cls "$saved_class" \
-        --arg ttl "$saved_title" \
-        --argjson ws "$laptop_ws" \
-        '[.[] | select(.workspace.id == $ws and .class == $cls)] |
-         if length == 1 then .[0].address
-         else ([.[] | select(.workspace.id == $ws and .class == $cls and .title == $ttl)] | .[0].address // empty)
-         end' <<< "$clients")
+        --arg address "$saved_address" \
+        --argjson pid "$saved_pid" \
+        '[.[] | select(.address == $address and .pid == $pid)] | .[0].address // empty' \
+        <<< "$clients")
 
     if [[ -z "$match_addr" || "$match_addr" == "null" ]]; then
-        # Fallback: search across all laptop workspaces by class+title
-        match_addr=$(jq -r \
-            --arg cls "$saved_class" \
-            --arg ttl "$saved_title" \
-            '[.[] | select(.workspace.id >= 1 and .workspace.id <= 6 and .class == $cls and .title == $ttl)] | .[0].address // empty' \
-            <<< "$clients")
-    fi
-
-    if [[ -z "$match_addr" || "$match_addr" == "null" ]]; then
-        # A previous retry may already have moved this window. Treat that as
-        # success so restoration stays idempotent.
-        match_addr=$(jq -r \
-            --arg cls "$saved_class" \
-            --arg ttl "$saved_title" \
-            --argjson ws "$saved_ws" \
-            '[.[] | select(.workspace.id == $ws and .class == $cls and .title == $ttl)] | .[0].address // empty' \
-            <<< "$clients")
-        already_restored=1
-    fi
-
-    if [[ -z "$match_addr" || "$match_addr" == "null" ]]; then
-        echo "  No match for: $saved_class ($saved_title)" >&2
-        failed=$((failed + 1))
+        echo "  Skipped closed window: $saved_class ($saved_title)"
+        skipped=$((skipped + 1))
         continue
     fi
+
+    current_ws=$(jq -r --arg address "$match_addr" \
+        '.[] | select(.address == $address) | .workspace.id' <<< "$clients")
 
     # Move window back to original external workspace
-    if ((already_restored == 0)) &&
+    if [[ "$current_ws" != "$saved_ws" ]] &&
         ! hyprctl dispatch movetoworkspacesilent "$saved_ws,address:$match_addr"; then
         echo "  Failed to move: $saved_class -> WS $saved_ws" >&2
         failed=$((failed + 1))
@@ -108,4 +94,5 @@ while read -r entry; do
 done < <(jq -c '.[]' "$LAYOUT_FILE")
 
 echo "Restored $restored / $saved_count window(s)"
+echo "Skipped $skipped window(s); failed $failed operation(s)"
 ((failed == 0))

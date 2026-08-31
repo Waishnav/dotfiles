@@ -1,6 +1,6 @@
 #!/bin/bash
 # Save the current window layout on external workspaces (11-16)
-# Captures: window class, title, workspace, floating state, size, position
+# Captures the exact client identity, workspace, and floating geometry.
 # Saved to a JSON file so hypr-restore-layout can recover it on reconnect
 
 set -o pipefail
@@ -12,6 +12,8 @@ EXTERNAL_WS_MAX=16
 # Build the snapshot in memory so a failed query cannot overwrite a valid file.
 if ! layout=$(hyprctl clients -j 2>/dev/null | jq -c \
   "[.[] | select(.workspace.id >= $EXTERNAL_WS_MIN and .workspace.id <= $EXTERNAL_WS_MAX) | {
+    address: .address,
+    pid: .pid,
     class: .class,
     title: .title,
     workspace: .workspace.id,

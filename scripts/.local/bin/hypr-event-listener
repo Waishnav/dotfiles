@@ -9,7 +9,10 @@ LAPTOP_MONITOR="${LAPTOP_MONITOR:-eDP-1}"
 LOG_FILE="${LOG_FILE:-/tmp/hypr-event-listener.log}"
 LAYOUT_FILE="${HYPR_EXTERNAL_LAYOUT_FILE:-/tmp/hypr-external-layout.json}"
 
-REMOVE_DEBOUNCE="${REMOVE_DEBOUNCE:-6}"
+# An awake unplug should collapse onto the laptop almost immediately. DPMS-off
+# removals use the dormant/wake-grace path below and retain their longer safety
+# window, so this short debounce does not reintroduce AFK wake reshuffling.
+REMOVE_DEBOUNCE="${REMOVE_DEBOUNCE:-1}"
 ADD_DEBOUNCE="${ADD_DEBOUNCE:-3}"
 PROBE_INTERVAL="${PROBE_INTERVAL:-5}"
 WAKE_GRACE="${WAKE_GRACE:-15}"
@@ -201,9 +204,18 @@ restore_external_layout() {
 }
 
 restore_external_configuration() {
-    enable_external_workspaces &&
-        sync_external_to_laptop_workspace &&
-        restore_external_layout
+    local failed=0
+
+    enable_external_workspaces || failed=1
+    sync_external_to_laptop_workspace || failed=1
+    restore_external_layout || failed=1
+
+    # A snapshot belongs to one genuine disconnect/reconnect cycle. Never
+    # replay it on a later DPMS wake, even when one best-effort operation failed.
+    LAYOUT_READY=0
+    rm -f -- "$LAYOUT_FILE"
+
+    ((failed == 0))
 }
 
 transition_to_dormant() {
@@ -248,12 +260,13 @@ transition_to_present() {
     case "$STATE" in
         absent)
             log "External monitor stable; restoring workspace layout"
-            if ! restore_external_configuration; then
-                log "Workspace restoration failed; retaining absent state for retry"
-                return 1
-            fi
+            # Physical monitor truth does not depend on whether every saved
+            # application survived or accepted its workspace move.
             STATE="present"
-            LAYOUT_READY=0
+            WAKE_GRACE_STARTED_AT=0
+            if ! restore_external_configuration; then
+                log "Workspace restoration completed with errors"
+            fi
             log "External monitor restored"
             ;;
         dormant | wake-grace)
@@ -458,19 +471,28 @@ event_loop() {
     local read_result
 
     while true; do
-        exec {event_fd}< <(exec socat -U - UNIX-CONNECT:"$SOCKET" 2>> "$LOG_FILE")
-        SOCKET_PID=$!
+        # A coprocess owns the socket for the whole session. The previous
+        # process-substitution FD was repeatedly closed after ordinary events,
+        # producing Broken pipe churn and starving periodic reconciliation.
+        coproc HYPR_EVENTS {
+            exec socat -U - UNIX-CONNECT:"$SOCKET" 2>> "$LOG_FILE"
+        }
+        SOCKET_PID=$HYPR_EVENTS_PID
+        event_fd=${HYPR_EVENTS[0]}
 
         while true; do
             if IFS= read -r -t "$PROBE_INTERVAL" -u "$event_fd" line; then
                 [[ -n "$line" ]] && handle_event "$line"
                 continue
-            fi
-
-            read_result=$?
-            if ((read_result > 128)); then
-                reconcile_state || true
-                continue
+            else
+                # Capture read's status inside the else branch. The status of
+                # an `if` with no executed branch is 0, which previously made
+                # every timeout look like EOF and closed the live socket.
+                read_result=$?
+                if ((read_result > 128)); then
+                    reconcile_state || true
+                    continue
+                fi
             fi
             break
         done
@@ -478,6 +500,7 @@ event_loop() {
         exec {event_fd}<&-
         wait "$SOCKET_PID" 2>/dev/null || true
         SOCKET_PID=""
+        unset HYPR_EVENTS HYPR_EVENTS_PID
         sleep 1
     done
 }

@@ -5,6 +5,8 @@ set -euo pipefail
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 TEST_TMP=$(mktemp -d)
 LAYOUT_FILE="$TEST_TMP/layout.json"
+DISPATCH_LOG="$TEST_TMP/dispatch.log"
+export DISPATCH_LOG
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 
 mock_hyprctl() {
@@ -13,6 +15,7 @@ mock_hyprctl() {
             save)
                 printf '%s\n' '[{
                     "address":"0x1",
+                    "pid":101,
                     "class":"Example",
                     "title":"Window",
                     "workspace":{"id":11},
@@ -24,6 +27,19 @@ mock_hyprctl() {
             restore)
                 printf '%s\n' '[{
                     "address":"0x1",
+                    "pid":101,
+                    "class":"Example",
+                    "title":"Changed title",
+                    "workspace":{"id":1},
+                    "floating":false,
+                    "at":[10,20],
+                    "size":[800,600]
+                }]'
+                ;;
+            unrelated)
+                printf '%s\n' '[{
+                    "address":"0x2",
+                    "pid":202,
                     "class":"Example",
                     "title":"Window",
                     "workspace":{"id":1},
@@ -39,7 +55,12 @@ mock_hyprctl() {
         return
     fi
 
-    [[ "$1" == "dispatch" ]]
+    if [[ "$1" == "dispatch" ]]; then
+        printf '%s\n' "$*" >> "$DISPATCH_LOG"
+        return 0
+    fi
+
+    return 1
 }
 
 hyprctl() {
@@ -63,5 +84,12 @@ fi
 export MOCK_PHASE=restore
 restore_output=$("$REPO_ROOT/scripts/.local/bin/hypr-restore-layout")
 [[ "$restore_output" == *"Restored 1 / 1 window(s)"* ]]
+[[ "$(<"$DISPATCH_LOG")" == *"11,address:0x1"* ]]
+
+: > "$DISPATCH_LOG"
+export MOCK_PHASE=unrelated
+restore_output=$("$REPO_ROOT/scripts/.local/bin/hypr-restore-layout")
+[[ "$restore_output" == *"Skipped closed window"* ]]
+[[ ! -s "$DISPATCH_LOG" ]]
 
 printf 'PASS: hypr layout save/restore scenarios\n'

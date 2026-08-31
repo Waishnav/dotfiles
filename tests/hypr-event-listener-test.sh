@@ -3,6 +3,9 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+TEST_TMP=$(mktemp -d)
+trap 'rm -rf -- "$TEST_TMP"' EXIT
+export HYPR_EXTERNAL_LAYOUT_FILE="$TEST_TMP/layout.json"
 LOG_FILE=/dev/null
 REMOVE_DEBOUNCE=2
 ADD_DEBOUNCE=2
@@ -156,11 +159,9 @@ STATE=absent
 MODE=present
 RESTORE_SUCCEEDS=0
 reconcile_state || true
-assert_equal absent "$STATE" "failed restoration remains retryable"
-RESTORE_SUCCEEDS=1
+assert_equal present "$STATE" "restoration failure cannot override monitor presence"
 reconcile_state
-assert_equal present "$STATE" "restoration retries successfully"
-assert_equal 2 "$RESTORES" "restoration was retried"
+assert_equal 1 "$RESTORES" "a failed snapshot is not replayed"
 
 reset_scenario
 STATE=dormant
