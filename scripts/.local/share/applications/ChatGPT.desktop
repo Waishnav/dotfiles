@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=ChatGPT
+GenericName=AI Assistant
+Comment=ChatGPT web app (chatgpt.com)
+Exec=omarchy-launch-or-focus-webapp ChatGPT "https://chatgpt.com/"
+Terminal=false
+Type=Application
+Icon=/home/waishnav/.local/share/applications/icons/ChatGPT.png
+StartupNotify=true
+Categories=Network;Chat;Office;
